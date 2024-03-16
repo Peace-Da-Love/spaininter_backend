@@ -36,7 +36,7 @@ export class News extends Model<News, NewsCreationAttrs> {
   })
   declare category_id: number;
 
-  @Column({ type: DataType.STRING(100), allowNull: false })
+  @Column({ type: DataType.STRING, allowNull: false })
   declare poster_link: string;
 
   @Column({ type: DataType.STRING(50), allowNull: false })

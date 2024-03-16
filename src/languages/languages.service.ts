@@ -29,9 +29,20 @@ export class LanguagesService {
     };
   }
 
+  public async getLanguages() {
+    const languages = await this.languageModel.findAll({
+      attributes: ['language_id', 'language_code'],
+    });
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Languages have been found',
+      data: { languages },
+    };
+  }
+
   public async getAllLanguages() {
     return this.languageModel.findAll({
-      attributes: ['language_id', 'language_code', 'language_name'],
+      attributes: ['language_id', 'language_code'],
     });
   }
 
@@ -49,5 +60,13 @@ export class LanguagesService {
     }
 
     return true;
+  }
+
+  public async findLanguageByName(language_code: string): Promise<number> {
+    const lang = await this.languageModel.findOne({
+      where: { language_code },
+      attributes: ['language_id'],
+    });
+    return lang.language_id;
   }
 }

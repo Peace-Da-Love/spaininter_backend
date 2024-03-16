@@ -22,7 +22,7 @@ export class LanguagesController {
   }
 
   @Get()
-  public getAllLanguages() {
-    return this.languagesService.getAllLanguages();
+  public getLanguages() {
+    return this.languagesService.getLanguages();
   }
 }

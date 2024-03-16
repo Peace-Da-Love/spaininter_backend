@@ -57,10 +57,11 @@ export class TokenService {
     newRefreshToken: string,
     oldRefreshToken: string,
   ) => {
-    return this.tokenModel.update(
-      { refresh_token: newRefreshToken },
-      { where: { admin_id: adminId, refresh_token: oldRefreshToken } },
-    );
+    const token = await this.tokenModel.findOne({
+      where: { admin_id: adminId, refresh_token: oldRefreshToken },
+    });
+    token.refresh_token = newRefreshToken;
+    await token.save();
   };
 
   public validateRefreshToken = (refreshToken: string) => {
@@ -75,15 +76,15 @@ export class TokenService {
     });
   };
 
-  public deleteToken = async (refreshToken: string) => {
-    const token = await this.tokenModel.destroy({
-      where: { refresh_token: refreshToken },
+  public deleteToken = async (adminId: number, refreshToken: string) => {
+    const token = await this.tokenModel.findOne({
+      where: { refresh_token: refreshToken, admin_id: adminId },
     });
 
     if (!token) {
       throw new HttpException('Token not found', HttpStatus.NOT_FOUND);
     }
 
-    return token;
+    await token.destroy();
   };
 }

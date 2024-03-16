@@ -39,4 +39,25 @@ export class CategoriesService {
       message: 'Category created successfully',
     };
   }
+
+  public async getCategories() {
+    const enLangId = await this.languagesService.findLanguageByName('en');
+
+    const categories = await this.categoryModel.findAll({
+      attributes: ['category_id'],
+      include: [
+        {
+          model: CategoryTranslations,
+          attributes: ['category_name'],
+          where: { language_id: enLangId },
+        },
+      ],
+    });
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Categories have been found',
+      data: { categories },
+    };
+  }
 }

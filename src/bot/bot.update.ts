@@ -15,7 +15,7 @@ export class BotUpdate {
       await ctx.reply(
         'Are you sure you want to log in?',
         Markup.inlineKeyboard([
-          Markup.button.login('Yes', `https://${HOST}/api/auth/login`),
+          Markup.button.login('Yes', `https://${HOST}/auth`),
           Markup.button.callback('No', `cancel_login`),
         ]),
       );

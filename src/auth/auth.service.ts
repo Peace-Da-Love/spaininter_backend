@@ -1,11 +1,16 @@
-import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
-import { ITelegramReq } from './types/ITelegramReq';
+import { HttpException, HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash, createHmac } from 'crypto';
 import { Admin } from './admin.model';
 import { InjectModel } from '@nestjs/sequelize';
 import { RegisterAdminDto } from './dto/register-admin.dto';
 import { TokenService } from '../token/token.service';
+import { LoginDto } from './dto/login.dto';
+import { REQUEST } from '@nestjs/core';
+import axios from 'axios';
+import { ITgUser } from './types';
+import { DeleteAdminDto } from './dto/delete-admin.dto';
+import { GetAdminsDto } from './dto/get-admins.dto';
 
 @Injectable()
 export class AuthService {
@@ -13,10 +18,11 @@ export class AuthService {
     private readonly configService: ConfigService,
     private readonly tokenService: TokenService,
     @InjectModel(Admin) private adminModel: typeof Admin,
+    @Inject(REQUEST) private readonly request: Request,
   ) {}
 
-  public async login(telegramReq: ITelegramReq) {
-    const isTelegramSignatureValid = this.checkTelegramSignature(telegramReq);
+  public async login(dto: LoginDto) {
+    const isTelegramSignatureValid = this.checkTelegramSignature(dto);
     if (!isTelegramSignatureValid) {
       throw new HttpException(
         'Telegram signature is not valid',
@@ -24,7 +30,7 @@ export class AuthService {
       );
     }
     const admin = await this.adminModel.findOne({
-      where: { tg_id: telegramReq.id },
+      where: { tg_id: dto.id },
     });
     if (!admin) {
       throw new HttpException('User is not an admin', HttpStatus.FORBIDDEN);
@@ -55,6 +61,91 @@ export class AuthService {
     };
   }
 
+  public async refresh(refreshToken: string) {
+    if (!refreshToken) {
+      throw new HttpException(
+        'Refresh token is required',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const admin = await this.tokenService.findToken(refreshToken);
+    const isTokenValid = this.tokenService.validateRefreshToken(refreshToken);
+    if (!admin || !isTokenValid) {
+      throw new HttpException('Invalid refresh token', HttpStatus.FORBIDDEN);
+    }
+    const tokens = await this.tokenService.generateTokens({
+      admin_id: isTokenValid.data.admin_id,
+    });
+    await this.tokenService.updateToken(
+      isTokenValid.data.admin_id,
+      tokens.refresh_token,
+      refreshToken,
+    );
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Success',
+      data: tokens,
+    };
+  }
+
+  public async logOut(refreshToken: string) {
+    if (!refreshToken) {
+      throw new HttpException(
+        'Refresh token is required',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const admin = await this.tokenService.findToken(refreshToken);
+    if (!admin) {
+      throw new HttpException('Invalid refresh token', HttpStatus.FORBIDDEN);
+    }
+    const isTokenValid = this.tokenService.validateRefreshToken(refreshToken);
+    await this.tokenService.deleteToken(
+      isTokenValid.data.admin_id,
+      refreshToken,
+    );
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Success',
+    };
+  }
+
+  public async getAdmins(dto: GetAdminsDto) {
+    const page = dto.page || 1;
+    const limit = dto.limit || 10;
+    const offset = (page - 1) * limit;
+
+    const admins = await this.adminModel.findAll({
+      limit,
+      offset,
+      attributes: ['id', 'tg_id', 'createdAt'],
+      order: [['createdAt', 'DESC']],
+    });
+    const adminsCount = await this.adminModel.count();
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Success',
+      data: {
+        count: adminsCount,
+        admins,
+      },
+    };
+  }
+
+  public async deleteAdmin(dto: DeleteAdminDto) {
+    const admin = await this.adminModel.findOne({
+      where: { id: dto.id },
+    });
+    if (!admin) {
+      throw new HttpException('Admin not found', HttpStatus.NOT_FOUND);
+    }
+    await admin.destroy();
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Success',
+    };
+  }
+
   private async checkAdminExists(tg_id: string): Promise<boolean> {
     const admin = await this.adminModel.findOne({
       where: { tg_id },
@@ -62,8 +153,8 @@ export class AuthService {
     return !!admin;
   }
 
-  private checkTelegramSignature(telegramReq: ITelegramReq): boolean {
-    const { hash, ...userData } = telegramReq;
+  private checkTelegramSignature(dto: LoginDto): boolean {
+    const { hash, ...userData } = dto;
     const BOT_TOKEN = this.configService.get<string>('TELEGRAM_BOT_TOKEN');
 
     // create a hash of a secret that both you and Telegram know. In this case, it is your bot token

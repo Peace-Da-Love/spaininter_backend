@@ -36,3 +36,4 @@ lerna-debug.log*
 google-storage-key.json
 
 .env
+/uploads

@@ -16,7 +16,7 @@ export class Token extends Model<Token, TokenCreationAttrs> {
   @Column({ type: DataType.INTEGER, allowNull: false, unique: false })
   declare admin_id: number;
 
-  @Column({ type: DataType.STRING, allowNull: false, unique: true })
+  @Column({ type: DataType.STRING, allowNull: false, unique: false })
   declare refresh_token: string;
 
   @BelongsTo(() => Admin, 'admin_id')

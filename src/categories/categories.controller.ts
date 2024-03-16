@@ -1,4 +1,11 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Post,
+} from '@nestjs/common';
 import { CategoriesService } from './categories.service';
 import { Auth } from '../auth/decorators/auth.decorator';
 import { CreateCategoryDto } from './dto/create-category.dto';
@@ -9,7 +16,14 @@ export class CategoriesController {
 
   @Auth()
   @Post('create')
+  @HttpCode(HttpStatus.CREATED)
   public async createCategory(@Body() dto: CreateCategoryDto) {
     return this.categoriesService.createCategory(dto);
+  }
+
+  @Get()
+  @HttpCode(HttpStatus.OK)
+  public async getCategories() {
+    return this.categoriesService.getCategories();
   }
 }
