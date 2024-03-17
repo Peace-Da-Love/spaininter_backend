@@ -7,8 +7,6 @@ import { RegisterAdminDto } from './dto/register-admin.dto';
 import { TokenService } from '../token/token.service';
 import { LoginDto } from './dto/login.dto';
 import { REQUEST } from '@nestjs/core';
-import axios from 'axios';
-import { ITgUser } from './types';
 import { DeleteAdminDto } from './dto/delete-admin.dto';
 import { GetAdminsDto } from './dto/get-admins.dto';
 
@@ -139,6 +137,7 @@ export class AuthService {
     if (!admin) {
       throw new HttpException('Admin not found', HttpStatus.NOT_FOUND);
     }
+    await this.tokenService.deleteAllTokens(admin.id);
     await admin.destroy();
     return {
       statusCode: HttpStatus.OK,

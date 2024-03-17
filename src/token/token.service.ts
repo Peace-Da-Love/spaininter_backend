@@ -87,4 +87,8 @@ export class TokenService {
 
     await token.destroy();
   };
+
+  public deleteAllTokens = async (adminId: number) => {
+    await this.tokenModel.destroy({ where: { admin_id: adminId } });
+  };
 }
