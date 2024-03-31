@@ -10,6 +10,7 @@ import { MulterModule } from '@nestjs/platform-express';
 import { CategoriesModule } from './categories/categories.module';
 import { LanguagesModule } from './languages/languages.module';
 import { NewsModule } from './news/news.module';
+import { MetadataModule } from './metadata/metadata.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { NewsModule } from './news/news.module';
     CategoriesModule,
     LanguagesModule,
     NewsModule,
+    MetadataModule,
   ],
 })
 export class AppModule {}

@@ -4,13 +4,14 @@ import { SequelizeModule } from '@nestjs/sequelize';
 import { News } from './news.model';
 import { NewsTranslations } from './news-translations.model';
 import { NewsController } from './news.controller';
-import { Category } from '../categories/categories.model';
 import { LanguagesModule } from '../languages/languages.module';
+import { CategoriesModule } from '../categories/categories.module';
 
 @Module({
   imports: [
-    SequelizeModule.forFeature([News, NewsTranslations, Category]),
+    SequelizeModule.forFeature([News, NewsTranslations]),
     LanguagesModule,
+    CategoriesModule,
   ],
   providers: [NewsService],
   controllers: [NewsController],

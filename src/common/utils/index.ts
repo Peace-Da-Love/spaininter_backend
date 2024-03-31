@@ -1,2 +1,2 @@
-export { linkFormater } from './link-formater';
+export { linkFormatter } from './link-formatter';
 export { removeInvalidCharacters } from './remove-invalid-characters';

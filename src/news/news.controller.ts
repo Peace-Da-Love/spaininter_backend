@@ -13,10 +13,19 @@ import { CreateNewsDto } from './dto/create-news.dto';
 import { Auth } from '../auth/decorators/auth.decorator';
 import { GetNewsForAdminDto } from './dto/get-news-for-admin.dto';
 import { DeleteNewsDto } from './dto/delete-news.dto';
+import { GetNewsByFilterDto } from './dto/get-news-by-filter.dto';
+import { GetNewsDto } from './dto/get-news.dto';
+import { GetRecommendedNewsDto } from './dto/get-recommended-news.dto';
 
 @Controller('news')
 export class NewsController {
   constructor(private readonly newsService: NewsService) {}
+
+  @Get()
+  @HttpCode(HttpStatus.OK)
+  public async getNewsById(@Query() dto: GetNewsDto) {
+    return this.newsService.getNewsById(dto);
+  }
 
   @Auth()
   @Post('create')
@@ -39,10 +48,15 @@ export class NewsController {
     return this.newsService.deleteNews(dto);
   }
 
-  @Post('get')
+  @Get('news-by-filter')
   @HttpCode(HttpStatus.OK)
-  public async getNews(@Body() dto: any) {
-    console.log(dto);
-    return 'ok';
+  public async getNewsByFilter(@Query() dto: GetNewsByFilterDto) {
+    return this.newsService.getNewsByFilter(dto);
+  }
+
+  @Get('recommended-news')
+  @HttpCode(HttpStatus.OK)
+  public async getRecommendedNews(@Query() dto: GetRecommendedNewsDto) {
+    return this.newsService.getRecommendedNews(dto);
   }
 }

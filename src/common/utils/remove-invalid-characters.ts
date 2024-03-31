@@ -1,5 +1,5 @@
-export const removeInvalidCharacters = (url: string) => {
-  const invalidCharacters = /[^\-._~:/?#[\]@!$&'()*+,;=%?]/g;
-  const cleanedUrl = url.replace(invalidCharacters, '');
-  return cleanedUrl.toLowerCase();
-};
+export function removeInvalidCharacters(str: string) {
+  // Remove all characters that are not letters in any language
+  const regExp = /[^\p{L}\p{M}\s]/gu;
+  return str.toLowerCase().replace(regExp, '');
+}

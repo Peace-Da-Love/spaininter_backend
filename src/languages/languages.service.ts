@@ -67,6 +67,12 @@ export class LanguagesService {
       where: { language_code },
       attributes: ['language_id'],
     });
+    if (!lang) {
+      throw new HttpException(
+        'Language does not exist',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
     return lang.language_id;
   }
 }

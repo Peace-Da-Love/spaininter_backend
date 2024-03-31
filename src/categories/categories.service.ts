@@ -28,8 +28,8 @@ export class CategoriesService {
     const category = await this.categoryModel.create();
 
     const translations = dto.translations.map((translation) => ({
-      ...translation,
       category_id: category.category_id,
+      category_name: translation.category_name.toLowerCase(),
     }));
 
     await this.categoryTranslationsModel.bulkCreate(translations);
@@ -59,5 +59,33 @@ export class CategoriesService {
       message: 'Categories have been found',
       data: { categories },
     };
+  }
+
+  public async findCategoryByName(categoryName: string): Promise<number> {
+    const category = await this.categoryTranslationsModel.findOne({
+      where: { category_name: categoryName.toLowerCase() },
+    });
+
+    if (!category)
+      throw new HttpException('Category not found', HttpStatus.NOT_FOUND);
+
+    return category.category_id;
+  }
+
+  public async findCategoryById(categoryId: number): Promise<string> {
+    const enLangId = await this.languagesService.findLanguageByName('en');
+    const category = await this.categoryTranslationsModel.findOne({
+      where: { category_id: categoryId, language_id: enLangId },
+    });
+
+    if (!category)
+      throw new HttpException('Category not found', HttpStatus.NOT_FOUND);
+
+    return category.category_name;
+  }
+
+  public async checkCategoryIdExists(categoryId: number): Promise<boolean> {
+    const category = await this.categoryModel.findByPk(categoryId);
+    return !!category;
   }
 }
