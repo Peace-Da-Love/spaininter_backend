@@ -30,6 +30,7 @@ export class CategoriesService {
     const translations = dto.translations.map((translation) => ({
       category_id: category.category_id,
       category_name: translation.category_name.toLowerCase(),
+      language_id: translation.language_id,
     }));
 
     await this.categoryTranslationsModel.bulkCreate(translations);
