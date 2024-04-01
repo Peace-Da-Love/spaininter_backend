@@ -9,6 +9,8 @@ import { LoginDto } from './dto/login.dto';
 import { REQUEST } from '@nestjs/core';
 import { DeleteAdminDto } from './dto/delete-admin.dto';
 import { GetAdminsDto } from './dto/get-admins.dto';
+import { Role } from '../role/role.model';
+import { IRole } from '../token/types/IPayload';
 
 @Injectable()
 export class AuthService {
@@ -17,6 +19,7 @@ export class AuthService {
     private readonly tokenService: TokenService,
     @InjectModel(Admin) private adminModel: typeof Admin,
     @Inject(REQUEST) private readonly request: Request,
+    @InjectModel(Role) private roleModel: typeof Role,
   ) {}
 
   public async login(dto: LoginDto) {
@@ -33,8 +36,12 @@ export class AuthService {
     if (!admin) {
       throw new HttpException('User is not an admin', HttpStatus.FORBIDDEN);
     }
+    const role = await this.roleModel.findOne({
+      where: { id: admin.role_id },
+    });
     const tokens = await this.tokenService.generateTokens({
       admin_id: admin.id,
+      role: role.name as IRole,
     });
     await this.tokenService.saveToken(admin.id, tokens.refresh_token);
     return {
@@ -44,14 +51,18 @@ export class AuthService {
     };
   }
 
-  public async register(dto: RegisterAdminDto) {
+  public async registerCreator(dto: RegisterAdminDto) {
     const tg_id = dto.tg_id.toString();
     const isAdminExists = await this.checkAdminExists(tg_id);
     if (isAdminExists) {
       throw new HttpException('Admin already exists', HttpStatus.BAD_REQUEST);
     }
+    const findRole = await this.roleModel.findOne({
+      where: { name: 'creator' },
+    });
     await this.adminModel.create({
       tg_id,
+      role_id: findRole.id,
     });
     return {
       statusCode: HttpStatus.CREATED,
@@ -73,6 +84,7 @@ export class AuthService {
     }
     const tokens = await this.tokenService.generateTokens({
       admin_id: isTokenValid.data.admin_id,
+      role: isTokenValid.data.role,
     });
     await this.tokenService.updateToken(
       isTokenValid.data.admin_id,

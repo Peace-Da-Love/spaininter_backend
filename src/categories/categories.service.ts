@@ -6,6 +6,9 @@ import { CreateCategoryDto } from './dto/create-category.dto';
 import { LanguagesService } from '../languages/languages.service';
 import { DeleteCategoryDto } from './dto/delete-category.dto';
 import { GetCategoryById } from './dto/get-category-by-id';
+import { Sequelize } from 'sequelize-typescript';
+import { News } from '../news/news.model';
+import { GetCategoriesByLangCodeDto } from './dto/get-categories-by-lang-code.dto';
 
 @Injectable()
 export class CategoriesService {
@@ -14,6 +17,8 @@ export class CategoriesService {
     @InjectModel(CategoryTranslations)
     private categoryTranslationsModel: typeof CategoryTranslations,
     private readonly languagesService: LanguagesService,
+    private sequelize: Sequelize,
+    @InjectModel(News) private newsModel: typeof News,
   ) {}
 
   public async createCategory(dto: CreateCategoryDto) {
@@ -40,6 +45,45 @@ export class CategoriesService {
     return {
       statusCode: HttpStatus.CREATED,
       message: 'Category created successfully',
+    };
+  }
+
+  public async getCategoryTranslations(dto: GetCategoriesByLangCodeDto) {
+    const langCode = dto.langCode;
+    const languageId = await this.languagesService.findLanguageByName(langCode);
+    const enLangId = await this.languagesService.findLanguageByName('en');
+
+    if (!languageId)
+      throw new HttpException('Language not found', HttpStatus.NOT_FOUND);
+
+    const categories = await this.categoryModel.findAll({
+      attributes: [
+        'category_id',
+        [Sequelize.col('categoryTranslations.category_name'), 'category_name'],
+        [
+          Sequelize.literal(
+            `(SELECT categoryTranslations.category_name FROM category_translations AS categoryTranslations WHERE categoryTranslations.category_id = "Category"."category_id" AND categoryTranslations.language_id = ${enLangId})`,
+          ),
+          'category_key',
+        ],
+      ],
+      include: [
+        {
+          attributes: [],
+          model: CategoryTranslations,
+          as: 'categoryTranslations',
+          where: { language_id: languageId },
+        },
+      ],
+    });
+
+    if (!categories)
+      throw new HttpException('Categories not found', HttpStatus.NOT_FOUND);
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Categories have been found',
+      data: { categories },
     };
   }
 
@@ -71,10 +115,27 @@ export class CategoriesService {
     if (!isCategoryExists)
       throw new HttpException('Category not found', HttpStatus.NOT_FOUND);
 
-    await this.categoryTranslationsModel.destroy({
-      where: { category_id: id },
-    });
-    await this.categoryModel.destroy({ where: { category_id: id } });
+    const t = await this.sequelize.transaction();
+
+    try {
+      await this.categoryModel.destroy({
+        where: { category_id: id },
+        transaction: t,
+      });
+
+      await this.newsModel.destroy({
+        where: { category_id: id },
+        transaction: t,
+      });
+
+      await t.commit();
+    } catch (err) {
+      await t.rollback();
+      throw new HttpException(
+        'Internal server error',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
 
     return {
       statusCode: HttpStatus.OK,

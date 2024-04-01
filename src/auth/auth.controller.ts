@@ -17,6 +17,8 @@ import { Auth } from './decorators/auth.decorator';
 import { LoginDto } from './dto/login.dto';
 import { DeleteAdminDto } from './dto/delete-admin.dto';
 import { GetAdminsDto } from './dto/get-admins.dto';
+import { Admin } from './admin.model';
+import { AdminAuth } from './decorators/admin.decorator';
 
 @Controller('auth')
 export class AuthController {
@@ -68,11 +70,11 @@ export class AuthController {
     return this.authService.logOut(refreshToken);
   }
 
-  @Auth()
+  @AdminAuth()
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
   public register(@Body() dto: RegisterAdminDto) {
-    return this.authService.register(dto);
+    return this.authService.registerCreator(dto);
   }
 
   @Auth()

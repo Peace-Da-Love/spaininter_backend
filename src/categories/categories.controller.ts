@@ -13,6 +13,7 @@ import { Auth } from '../auth/decorators/auth.decorator';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { DeleteCategoryDto } from './dto/delete-category.dto';
 import { GetCategoryById } from './dto/get-category-by-id';
+import { GetCategoriesByLangCodeDto } from './dto/get-categories-by-lang-code.dto';
 
 @Controller('categories')
 export class CategoriesController {
@@ -42,5 +43,13 @@ export class CategoriesController {
   @HttpCode(HttpStatus.OK)
   public async getCategoryById(@Query() dto: GetCategoryById) {
     return this.categoriesService.getCategoryById(dto);
+  }
+
+  @Get('category-translations')
+  @HttpCode(HttpStatus.OK)
+  public async getCategoryTranslations(
+    @Query() dto: GetCategoriesByLangCodeDto,
+  ) {
+    return this.categoriesService.getCategoryTranslations(dto);
   }
 }

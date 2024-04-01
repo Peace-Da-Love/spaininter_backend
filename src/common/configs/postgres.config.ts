@@ -7,6 +7,7 @@ import { Category } from '../../categories/categories.model';
 import { CategoryTranslations } from '../../categories/category-translations.model';
 import { NewsTranslations } from '../../news/news-translations.model';
 import { News } from '../../news/news.model';
+import { Role } from '../../role/role.model';
 
 export const postgresConfig = async (
   configService: ConfigService,
@@ -26,5 +27,6 @@ export const postgresConfig = async (
     CategoryTranslations,
     NewsTranslations,
     News,
+    Role,
   ],
 });

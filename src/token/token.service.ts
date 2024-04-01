@@ -4,7 +4,7 @@ import { Token } from './token.model';
 import { JwtService } from '@nestjs/jwt';
 import { InjectModel } from '@nestjs/sequelize';
 import { ITokens } from './types/ITokens';
-import { IPayload } from './types/IPayload';
+import { IJwtPayload, IPayload } from './types/IPayload';
 
 @Injectable()
 export class TokenService {
@@ -26,6 +26,7 @@ export class TokenService {
     const updatedPayload = {
       data: {
         admin_id: payload.admin_id,
+        role: payload.role,
       },
     };
 
@@ -64,7 +65,7 @@ export class TokenService {
     await token.save();
   };
 
-  public validateRefreshToken = (refreshToken: string) => {
+  public validateRefreshToken = (refreshToken: string): IJwtPayload => {
     return this.jwtService.verify(refreshToken, {
       secret: this.JWT_REFRESH_SECRET,
     });

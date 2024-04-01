@@ -11,6 +11,7 @@ import { CategoriesModule } from './categories/categories.module';
 import { LanguagesModule } from './languages/languages.module';
 import { NewsModule } from './news/news.module';
 import { MetadataModule } from './metadata/metadata.module';
+import { RoleModule } from './role/role.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { MetadataModule } from './metadata/metadata.module';
     LanguagesModule,
     NewsModule,
     MetadataModule,
+    RoleModule,
   ],
 })
 export class AppModule {}

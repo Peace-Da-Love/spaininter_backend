@@ -6,12 +6,13 @@ import { SequelizeModule } from '@nestjs/sequelize';
 import { Admin } from './admin.model';
 import { TokenModule } from '../token/token.module';
 import { JwtStrategy } from './strategy/jwt.strategy';
+import { Role } from '../role/role.model';
 
 @Module({
   imports: [
     forwardRef(() => TokenModule),
     ConfigModule,
-    SequelizeModule.forFeature([Admin]),
+    SequelizeModule.forFeature([Admin, Role]),
   ],
   providers: [AuthService, JwtStrategy],
   controllers: [AuthController],

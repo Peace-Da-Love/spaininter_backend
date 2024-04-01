@@ -1,9 +1,19 @@
-import { Column, DataType, HasMany, Model, Table } from 'sequelize-typescript';
+import {
+  BelongsTo,
+  Column,
+  DataType,
+  ForeignKey,
+  HasMany,
+  Model,
+  Table,
+} from 'sequelize-typescript';
+import { Role } from '../role/role.model';
 import { Token } from '../token/token.model';
 import { News } from '../news/news.model';
 
 interface AdminCreationAttrs {
   tg_id: string;
+  role_id: number;
 }
 
 @Table({ tableName: 'admins' })
@@ -13,6 +23,13 @@ export class Admin extends Model<Admin, AdminCreationAttrs> {
 
   @Column({ type: DataType.STRING, allowNull: false, unique: true })
   declare tg_id: string;
+
+  @ForeignKey(() => Role)
+  @Column({ type: DataType.INTEGER })
+  declare role_id: number;
+
+  @BelongsTo(() => Role)
+  declare role: Role;
 
   @HasMany(() => Token, 'admin_id')
   declare tokens: Token[];
