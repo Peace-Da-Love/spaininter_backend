@@ -4,6 +4,8 @@ import { Category } from './categories.model';
 import { CategoryTranslations } from './category-translations.model';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { LanguagesService } from '../languages/languages.service';
+import { DeleteCategoryDto } from './dto/delete-category.dto';
+import { GetCategoryById } from './dto/get-category-by-id';
 
 @Injectable()
 export class CategoriesService {
@@ -59,6 +61,48 @@ export class CategoriesService {
       statusCode: HttpStatus.OK,
       message: 'Categories have been found',
       data: { categories },
+    };
+  }
+
+  public async deleteCategory(dto: DeleteCategoryDto) {
+    const id = Number(dto.id);
+    const isCategoryExists = await this.checkCategoryIdExists(id);
+
+    if (!isCategoryExists)
+      throw new HttpException('Category not found', HttpStatus.NOT_FOUND);
+
+    await this.categoryTranslationsModel.destroy({
+      where: { category_id: id },
+    });
+    await this.categoryModel.destroy({ where: { category_id: id } });
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Category has been deleted',
+    };
+  }
+
+  public async getCategoryById(dto: GetCategoryById) {
+    const id = Number(dto.id);
+
+    const isCategoryExists = await this.checkCategoryIdExists(id);
+
+    if (!isCategoryExists)
+      throw new HttpException('Category not found', HttpStatus.NOT_FOUND);
+
+    const category = await this.categoryModel.findByPk(id, {
+      include: [
+        {
+          model: CategoryTranslations,
+          attributes: ['category_name'],
+        },
+      ],
+    });
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Category has been found',
+      data: { category },
     };
   }
 
