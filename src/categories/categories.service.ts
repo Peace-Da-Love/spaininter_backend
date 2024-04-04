@@ -91,11 +91,15 @@ export class CategoriesService {
     const enLangId = await this.languagesService.findLanguageByName('en');
 
     const categories = await this.categoryModel.findAll({
-      attributes: ['category_id'],
+      attributes: [
+        'category_id',
+        'createdAt',
+        [Sequelize.col('categoryTranslations.category_name'), 'category_name'],
+      ],
       include: [
         {
           model: CategoryTranslations,
-          attributes: ['category_name'],
+          attributes: [],
           where: { language_id: enLangId },
         },
       ],
