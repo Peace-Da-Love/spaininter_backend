@@ -39,6 +39,7 @@ export class AuthService {
     const role = await this.roleModel.findOne({
       where: { id: admin.role_id },
     });
+    console.log(role.name);
     const tokens = await this.tokenService.generateTokens({
       admin_id: admin.id,
       role: role.name as IRole,

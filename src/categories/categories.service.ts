@@ -63,7 +63,7 @@ export class CategoriesService {
         [Sequelize.col('categoryTranslations.category_name'), 'category_name'],
         [
           Sequelize.literal(
-            `(SELECT categoryTranslations.category_name FROM category_translations AS categoryTranslations WHERE categoryTranslations.category_id = "Category"."category_id" AND categoryTranslations.language_id = ${enLangId})`,
+            `(SELECT REPLACE(REPLACE(categoryTranslations.category_name, '/', '-'), '\\', '-') FROM category_translations AS categoryTranslations WHERE categoryTranslations.category_id = "Category"."category_id" AND categoryTranslations.language_id = ${enLangId})`,
           ),
           'category_key',
         ],
