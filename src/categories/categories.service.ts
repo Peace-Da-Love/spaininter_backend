@@ -9,6 +9,7 @@ import { GetCategoryById } from './dto/get-category-by-id';
 import { Sequelize } from 'sequelize-typescript';
 import { News } from '../news/news.model';
 import { GetCategoriesByLangCodeDto } from './dto/get-categories-by-lang-code.dto';
+import { GetCategoryByNameDto } from './dto/get-category-by-name.dto';
 
 @Injectable()
 export class CategoriesService {
@@ -168,6 +169,35 @@ export class CategoriesService {
       statusCode: HttpStatus.OK,
       message: 'Category has been found',
       data: { category },
+    };
+  }
+
+  public async getCategoryByName(dto: GetCategoryByNameDto) {
+    const langId = await this.languagesService.findLanguageByName(dto.langCode);
+
+    const category = await this.categoryTranslationsModel.findOne({
+      where: {
+        category_name: dto.name.toLowerCase(),
+      },
+    });
+
+    if (!category)
+      throw new HttpException('Category not found', HttpStatus.NOT_FOUND);
+
+    const translatedCategory = await this.categoryTranslationsModel.findOne({
+      attributes: ['category_name'],
+      where: {
+        category_id: category.category_id,
+        language_id: langId,
+      },
+    });
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Category has been found',
+      data: {
+        categoryName: translatedCategory.category_name,
+      },
     };
   }
 

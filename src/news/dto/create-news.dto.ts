@@ -49,7 +49,7 @@ export class CreateNewsTranslationDto {
 
   @IsString()
   @IsNotEmpty()
-  @Length(1, 5000)
+  @Length(1, 50000)
   content: string;
 
   @IsString()

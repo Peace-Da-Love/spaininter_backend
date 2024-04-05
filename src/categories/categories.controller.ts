@@ -14,6 +14,7 @@ import { CreateCategoryDto } from './dto/create-category.dto';
 import { DeleteCategoryDto } from './dto/delete-category.dto';
 import { GetCategoryById } from './dto/get-category-by-id';
 import { GetCategoriesByLangCodeDto } from './dto/get-categories-by-lang-code.dto';
+import { GetCategoryByNameDto } from './dto/get-category-by-name.dto';
 
 @Controller('categories')
 export class CategoriesController {
@@ -51,5 +52,11 @@ export class CategoriesController {
     @Query() dto: GetCategoriesByLangCodeDto,
   ) {
     return this.categoriesService.getCategoryTranslations(dto);
+  }
+
+  @Get('get-by-name')
+  @HttpCode(HttpStatus.OK)
+  public async getCategoryByName(@Query() dto: GetCategoryByNameDto) {
+    return this.categoriesService.getCategoryByName(dto);
   }
 }
