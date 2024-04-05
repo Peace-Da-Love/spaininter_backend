@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import { Category } from '../categories/categories.model';
 import { CategoryTranslations } from '../categories/category-translations.model';
@@ -7,6 +7,7 @@ import { NewsTranslations } from '../news/news-translations.model';
 import { News } from '../news/news.model';
 import { col, Sequelize } from 'sequelize';
 import { Language } from '../languages/languages.model';
+import { GetNewsMetadataDto } from './dto/get-news-metadata.dto';
 
 @Injectable()
 export class MetadataService {
@@ -19,6 +20,40 @@ export class MetadataService {
     private newsTranslationsModel: typeof NewsTranslations,
     private readonly languagesService: LanguagesService,
   ) {}
+
+  public async getNewsMetadataById(dto: GetNewsMetadataDto) {
+    const langId = await this.languagesService.findLanguageByName(dto.langCode);
+
+    const news = await this.newsModel.findOne({
+      attributes: [
+        [col('newsTranslations.title'), 'title'],
+        [col('newsTranslations.description'), 'description'],
+        [col('poster_link'), 'posterLink'],
+      ],
+      where: {
+        news_id: Number(dto.id),
+      },
+      include: [
+        {
+          attributes: [],
+          model: NewsTranslations,
+          where: {
+            language_id: langId,
+          },
+        },
+      ],
+    });
+
+    if (!news) throw new HttpException('News not found', HttpStatus.NOT_FOUND);
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'News fetch success',
+      data: {
+        news,
+      },
+    };
+  }
 
   public async getCategoryMetadata() {
     const enLangId = await this.languagesService.findLanguageByName('en');
