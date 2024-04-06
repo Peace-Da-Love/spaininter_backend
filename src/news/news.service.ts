@@ -14,6 +14,7 @@ import { CategoryTranslations } from '../categories/category-translations.model'
 import { Category } from '../categories/categories.model';
 import { GetNewsDto } from './dto/get-news.dto';
 import { GetRecommendedNewsDto } from './dto/get-recommended-news.dto';
+import { col } from 'sequelize';
 
 @Injectable()
 export class NewsService {
@@ -132,11 +133,15 @@ export class NewsService {
       limit,
       offset,
       attributes: ['news_id', 'createdAt', 'views'],
-      include: {
-        model: NewsTranslations,
-        attributes: ['title'],
-        where: { language_id: enLangId },
-      },
+      include: [
+        {
+          attributes: ['title', 'link'],
+          model: NewsTranslations,
+          where: {
+            language_id: enLangId,
+          },
+        },
+      ],
       order: [['createdAt', 'DESC']],
     });
 
