@@ -44,7 +44,7 @@ export class CreateNewsTranslationDto {
 
   @IsString()
   @IsNotEmpty()
-  @Length(1, 250)
+  @Length(1, 255)
   description: string;
 
   @IsString()
