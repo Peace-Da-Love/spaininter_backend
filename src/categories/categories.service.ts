@@ -156,19 +156,22 @@ export class CategoriesService {
     if (!isCategoryExists)
       throw new HttpException('Category not found', HttpStatus.NOT_FOUND);
 
-    const category = await this.categoryModel.findByPk(id, {
-      include: [
-        {
-          model: CategoryTranslations,
-          attributes: ['category_name'],
-        },
-      ],
+    const enLangId = await this.languagesService.findLanguageByName('en');
+
+    const category = await this.categoryTranslationsModel.findOne({
+      attributes: ['category_name'],
+      where: {
+        category_id: id,
+        language_id: enLangId,
+      },
     });
 
     return {
       statusCode: HttpStatus.OK,
       message: 'Category has been found',
-      data: { category },
+      data: {
+        categoryName: category.category_name,
+      },
     };
   }
 

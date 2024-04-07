@@ -39,7 +39,6 @@ export class AuthService {
     const role = await this.roleModel.findOne({
       where: { id: admin.role_id },
     });
-    console.log(role.name);
     const tokens = await this.tokenService.generateTokens({
       admin_id: admin.id,
       role: role.name as IRole,
@@ -60,6 +59,25 @@ export class AuthService {
     }
     const findRole = await this.roleModel.findOne({
       where: { name: 'creator' },
+    });
+    await this.adminModel.create({
+      tg_id,
+      role_id: findRole.id,
+    });
+    return {
+      statusCode: HttpStatus.CREATED,
+      message: 'Success',
+    };
+  }
+
+  public async registerAdmin(dto: RegisterAdminDto) {
+    const tg_id = dto.tg_id.toString();
+    const isAdminExists = await this.checkAdminExists(tg_id);
+    if (isAdminExists) {
+      throw new HttpException('Admin already exists', HttpStatus.BAD_REQUEST);
+    }
+    const findRole = await this.roleModel.findOne({
+      where: { name: 'superadmin' },
     });
     await this.adminModel.create({
       tg_id,
@@ -126,19 +144,65 @@ export class AuthService {
     const limit = dto.limit || 10;
     const offset = (page - 1) * limit;
 
+    const superAdminRole = await this.roleModel.findOne({
+      where: {
+        name: 'superadmin',
+      },
+    });
     const admins = await this.adminModel.findAll({
       limit,
       offset,
+      where: {
+        role_id: superAdminRole.id,
+      },
       attributes: ['id', 'tg_id', 'createdAt'],
       order: [['createdAt', 'DESC']],
     });
-    const adminsCount = await this.adminModel.count();
+    const adminsCount = await this.adminModel.count({
+      where: {
+        role_id: superAdminRole.id,
+      },
+    });
     return {
       statusCode: HttpStatus.OK,
       message: 'Success',
       data: {
         count: adminsCount,
         admins,
+      },
+    };
+  }
+
+  public async getCreators(dto: GetAdminsDto) {
+    const page = dto.page || 1;
+    const limit = dto.limit || 10;
+    const offset = (page - 1) * limit;
+
+    const creatorAdminRole = await this.roleModel.findOne({
+      where: {
+        name: 'creator',
+      },
+    });
+    const creators = await this.adminModel.findAll({
+      limit,
+      offset,
+      where: {
+        role_id: creatorAdminRole.id,
+      },
+      attributes: ['id', 'tg_id', 'createdAt'],
+      order: [['createdAt', 'DESC']],
+    });
+    const creatorsCount = await this.adminModel.count({
+      where: {
+        role_id: creatorAdminRole.id,
+      },
+    });
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Success',
+      data: {
+        count: creatorsCount,
+        creators,
       },
     };
   }

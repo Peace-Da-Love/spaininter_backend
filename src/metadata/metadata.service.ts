@@ -30,6 +30,7 @@ export class MetadataService {
         [col('newsTranslations.description'), 'description'],
         [col('poster_link'), 'posterLink'],
         'createdAt',
+        'updatedAt',
       ],
       where: {
         news_id: Number(dto.id),

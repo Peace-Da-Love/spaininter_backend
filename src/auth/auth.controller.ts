@@ -17,7 +17,6 @@ import { Auth } from './decorators/auth.decorator';
 import { LoginDto } from './dto/login.dto';
 import { DeleteAdminDto } from './dto/delete-admin.dto';
 import { GetAdminsDto } from './dto/get-admins.dto';
-import { Admin } from './admin.model';
 import { AdminAuth } from './decorators/admin.decorator';
 
 @Controller('auth')
@@ -71,20 +70,34 @@ export class AuthController {
   }
 
   @AdminAuth()
-  @Post('register')
+  @Post('register-creator')
   @HttpCode(HttpStatus.CREATED)
-  public register(@Body() dto: RegisterAdminDto) {
+  public registerCreator(@Body() dto: RegisterAdminDto) {
     return this.authService.registerCreator(dto);
   }
 
-  @Auth()
+  @AdminAuth()
+  @Post('register-admin')
+  @HttpCode(HttpStatus.CREATED)
+  public registerAdmin(@Body() dto: RegisterAdminDto) {
+    return this.authService.registerAdmin(dto);
+  }
+
+  @AdminAuth()
   @Get('/admins')
   @HttpCode(HttpStatus.OK)
   public getAdmins(@Query() dto: GetAdminsDto) {
     return this.authService.getAdmins(dto);
   }
 
-  @Auth()
+  @AdminAuth()
+  @Get('/creators')
+  @HttpCode(HttpStatus.OK)
+  public getCreators(@Query() dto: GetAdminsDto) {
+    return this.authService.getCreators(dto);
+  }
+
+  @AdminAuth()
   @Delete('/admins')
   @HttpCode(HttpStatus.OK)
   public deleteAdmin(@Query() dto: DeleteAdminDto) {
