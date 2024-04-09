@@ -315,6 +315,8 @@ export class NewsService {
     };
   }
 
+  public async getLinks() {}
+
   private escapeJsonString(str: string) {
     return str
       .replace(/[\\]/g, '\\\\')

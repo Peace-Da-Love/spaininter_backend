@@ -46,6 +46,12 @@ export class MetadataService {
       ],
     });
 
+    const links = await this.newsTranslationsModel.findAll({
+      attributes: ['link'],
+      where: { news_id: Number(dto.id) },
+      include: [{ model: Language, attributes: ['language_code'] }],
+    });
+
     if (!news) throw new HttpException('News not found', HttpStatus.NOT_FOUND);
 
     return {
@@ -53,6 +59,7 @@ export class MetadataService {
       message: 'News fetch success',
       data: {
         news,
+        links,
       },
     };
   }
