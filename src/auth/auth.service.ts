@@ -11,6 +11,8 @@ import { DeleteAdminDto } from './dto/delete-admin.dto';
 import { GetAdminsDto } from './dto/get-admins.dto';
 import { Role } from '../role/role.model';
 import { IRole } from '../token/types/IPayload';
+import { Sequelize } from 'sequelize-typescript';
+import { News } from '../news/news.model';
 
 @Injectable()
 export class AuthService {
@@ -20,6 +22,8 @@ export class AuthService {
     @InjectModel(Admin) private adminModel: typeof Admin,
     @Inject(REQUEST) private readonly request: Request,
     @InjectModel(Role) private roleModel: typeof Role,
+    @InjectModel(News) private newsModel: typeof News,
+    private sequelize: Sequelize,
   ) {}
 
   public async login(dto: LoginDto) {
@@ -214,8 +218,31 @@ export class AuthService {
     if (!admin) {
       throw new HttpException('Admin not found', HttpStatus.NOT_FOUND);
     }
-    await this.tokenService.deleteAllTokens(admin.id);
-    await admin.destroy();
+    const t = await this.sequelize.transaction();
+    try {
+      await this.tokenService.deleteAllTokens(admin.id, t);
+      await this.newsModel.update(
+        {
+          admin_id: null,
+        },
+        {
+          where: { admin_id: dto.id },
+          transaction: t,
+        },
+      );
+      await this.adminModel.destroy({
+        where: { id: dto.id },
+        transaction: t,
+      });
+      await t.commit();
+    } catch (err) {
+      await t.rollback();
+      throw new HttpException(
+        'Internal server error',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
     return {
       statusCode: HttpStatus.OK,
       message: 'Success',

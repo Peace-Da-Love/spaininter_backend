@@ -49,10 +49,17 @@ export class News extends Model<News, NewsCreationAttrs> {
   declare views: number;
 
   @ForeignKey(() => Admin)
-  @Column({ type: DataType.INTEGER, allowNull: false })
+  @Column({
+    type: DataType.INTEGER,
+    allowNull: true, // allowNull should be true for SET NULL// or 'NO ACTION'
+  })
   declare admin_id: number;
 
-  @BelongsTo(() => Admin, 'admin_id')
+  @BelongsTo(() => Admin, {
+    foreignKey: 'admin_id',
+    targetKey: 'id',
+    onDelete: 'SET NULL',
+  })
   declare admin: Admin;
 
   @BelongsTo(() => Category, 'category_id')

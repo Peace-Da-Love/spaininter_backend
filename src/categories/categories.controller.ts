@@ -6,6 +6,7 @@ import {
   HttpCode,
   HttpStatus,
   Post,
+  Put,
   Query,
 } from '@nestjs/common';
 import { CategoriesService } from './categories.service';
@@ -15,6 +16,7 @@ import { DeleteCategoryDto } from './dto/delete-category.dto';
 import { GetCategoryById } from './dto/get-category-by-id';
 import { GetCategoriesByLangCodeDto } from './dto/get-categories-by-lang-code.dto';
 import { GetCategoryByNameDto } from './dto/get-category-by-name.dto';
+import { UpdateCategoryDto } from './dto/update-category.dto';
 
 @Controller('categories')
 export class CategoriesController {
@@ -58,5 +60,12 @@ export class CategoriesController {
   @HttpCode(HttpStatus.OK)
   public async getCategoryByName(@Query() dto: GetCategoryByNameDto) {
     return this.categoriesService.getCategoryByName(dto);
+  }
+
+  @Auth()
+  @Put('update')
+  @HttpCode(HttpStatus.OK)
+  public async updateCategory(@Body() dto: UpdateCategoryDto) {
+    return this.categoriesService.updateCategory(dto);
   }
 }

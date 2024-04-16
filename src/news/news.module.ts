@@ -6,12 +6,14 @@ import { NewsTranslations } from './news-translations.model';
 import { NewsController } from './news.controller';
 import { LanguagesModule } from '../languages/languages.module';
 import { CategoriesModule } from '../categories/categories.module';
+import { TelegramNewsletterModule } from '../telegram-newsletter/telegram-newsletter.module';
 
 @Module({
   imports: [
     SequelizeModule.forFeature([News, NewsTranslations]),
     LanguagesModule,
     CategoriesModule,
+    TelegramNewsletterModule,
   ],
   providers: [NewsService],
   controllers: [NewsController],

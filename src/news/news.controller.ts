@@ -6,6 +6,7 @@ import {
   HttpCode,
   HttpStatus,
   Post,
+  Put,
   Query,
 } from '@nestjs/common';
 import { NewsService } from './news.service';
@@ -16,6 +17,7 @@ import { DeleteNewsDto } from './dto/delete-news.dto';
 import { GetNewsByFilterDto } from './dto/get-news-by-filter.dto';
 import { GetNewsDto } from './dto/get-news.dto';
 import { GetRecommendedNewsDto } from './dto/get-recommended-news.dto';
+import { UpdateNewsDto } from './dto/update-news.dto';
 
 @Controller('news')
 export class NewsController {
@@ -58,5 +60,12 @@ export class NewsController {
   @HttpCode(HttpStatus.OK)
   public async getRecommendedNews(@Query() dto: GetRecommendedNewsDto) {
     return this.newsService.getRecommendedNews(dto);
+  }
+
+  @Auth()
+  @Put('update')
+  @HttpCode(HttpStatus.OK)
+  public async updateNews(@Body() dto: UpdateNewsDto) {
+    return this.newsService.updateNews(dto);
   }
 }

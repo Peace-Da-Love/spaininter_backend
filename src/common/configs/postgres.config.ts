@@ -8,6 +8,7 @@ import { CategoryTranslations } from '../../categories/category-translations.mod
 import { NewsTranslations } from '../../news/news-translations.model';
 import { News } from '../../news/news.model';
 import { Role } from '../../role/role.model';
+import { TgChannel } from '../../telegram-newsletter/telegram-newsletter.model';
 
 export const postgresConfig = async (
   configService: ConfigService,
@@ -28,5 +29,6 @@ export const postgresConfig = async (
     NewsTranslations,
     News,
     Role,
+    TgChannel,
   ],
 });

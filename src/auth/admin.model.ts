@@ -18,7 +18,11 @@ interface AdminCreationAttrs {
 
 @Table({ tableName: 'admins' })
 export class Admin extends Model<Admin, AdminCreationAttrs> {
-  @Column({ type: DataType.INTEGER, primaryKey: true, autoIncrement: true })
+  @Column({
+    type: DataType.INTEGER,
+    primaryKey: true,
+    autoIncrement: true,
+  })
   declare id: number;
 
   @Column({ type: DataType.STRING, allowNull: false, unique: true })
@@ -34,7 +38,9 @@ export class Admin extends Model<Admin, AdminCreationAttrs> {
   @HasMany(() => Token, 'admin_id')
   declare tokens: Token[];
 
-  @HasMany(() => News, 'admin_id')
+  @HasMany(() => News, {
+    foreignKey: 'admin_id',
+  })
   declare news: News[];
 
   declare createdAt: Date;

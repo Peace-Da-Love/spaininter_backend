@@ -15,6 +15,10 @@ import { Category } from '../categories/categories.model';
 import { GetNewsDto } from './dto/get-news.dto';
 import { GetRecommendedNewsDto } from './dto/get-recommended-news.dto';
 import { col } from 'sequelize';
+import { Sequelize } from 'sequelize-typescript';
+import { UpdateNewsDto } from './dto/update-news.dto';
+import { TelegramNewsletterService } from '../telegram-newsletter/telegram-newsletter.service';
+import { escapeSpecialCharacters } from '../common/utils';
 
 @Injectable()
 export class NewsService {
@@ -25,6 +29,8 @@ export class NewsService {
     @Inject(REQUEST) private readonly request: Request,
     private readonly languageService: LanguagesService,
     private readonly categoryService: CategoriesService,
+    private readonly telegramNewsletterService: TelegramNewsletterService,
+    private sequelize: Sequelize,
   ) {}
 
   public async getNewsById(dto: GetNewsDto) {
@@ -46,7 +52,7 @@ export class NewsService {
         {
           model: NewsTranslations,
           where: { language_id: languageId },
-          attributes: ['title', 'content', 'link'],
+          attributes: ['title', 'content', 'link', 'description'],
         },
         {
           model: Category,
@@ -96,25 +102,44 @@ export class NewsService {
         HttpStatus.BAD_REQUEST,
       );
 
-    const news = await this.newsModel.create({
-      category_id: dto.category_id,
-      admin_id: this.request['user'].admin_id,
-      poster_link: dto.poster_link,
-      province: dto.province,
-      city: dto.city,
-    });
+    const t = await this.sequelize.transaction();
 
-    const translations = dto.translations.map((translation) => {
-      return {
-        ...translation,
-        link:
-          translation.link || linkFormatter(translation.title, news.news_id),
-        news_id: news.news_id,
-        content: this.escapeJsonString(translation.content),
-      };
-    });
+    try {
+      const news = await this.newsModel.create({
+        category_id: dto.category_id,
+        admin_id: this.request['user'].admin_id,
+        poster_link: dto.poster_link,
+        province: dto.province,
+        city: dto.city,
+      });
 
-    await this.newsTranslationsModel.bulkCreate(translations);
+      const translations = dto.translations.map((translation) => {
+        return {
+          ...translation,
+          link:
+            translation.link || linkFormatter(translation.title, news.news_id),
+          news_id: news.news_id,
+          content: this.escapeJsonString(translation.content),
+        };
+      });
+
+      await this.newsTranslationsModel.bulkCreate(translations);
+
+      const enLangId = await this.languageService.findLanguageByName('en');
+      const enTitle = escapeSpecialCharacters(
+        translations.find((t) => t.language_id === enLangId).title,
+      );
+      const enLink = translations.find((t) => t.language_id === enLangId).link;
+      const ivLink = `https://t.me/iv?url=https://spaininter.com/en/news/${enLink}&rhash=66ac0b9968d595`;
+      const tgMessage = `[${enTitle}](${ivLink})\n\n${escapeSpecialCharacters(
+        dto.telegramShortText,
+      )}`;
+      await this.telegramNewsletterService.sendNewsletter(tgMessage);
+      await t.commit();
+    } catch (err) {
+      await t.rollback();
+      throw new HttpException('Failed to create news', HttpStatus.BAD_REQUEST);
+    }
 
     return {
       statusCode: HttpStatus.CREATED,
@@ -164,6 +189,39 @@ export class NewsService {
     return {
       statusCode: HttpStatus.OK,
       message: 'News deleted successfully',
+    };
+  }
+
+  public async updateNews(dto: UpdateNewsDto) {
+    const isNewsExists = await this.newsModel.findOne({
+      where: { news_id: dto.newsId },
+    });
+
+    if (!isNewsExists)
+      throw new HttpException('News not found', HttpStatus.NOT_FOUND);
+
+    const isNewsTranslationExists = await this.newsTranslationsModel.findOne({
+      where: { news_id: dto.newsId, language_id: dto.languageId },
+    });
+
+    if (!isNewsTranslationExists)
+      throw new HttpException(
+        'News translation not found',
+        HttpStatus.NOT_FOUND,
+      );
+
+    await this.newsTranslationsModel.update(
+      {
+        title: dto.title,
+        description: dto.description,
+        content: dto.content,
+      },
+      { where: { news_id: dto.newsId, language_id: dto.languageId } },
+    );
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'News updated successfully',
     };
   }
 

@@ -10,6 +10,9 @@ import { Sequelize } from 'sequelize-typescript';
 import { News } from '../news/news.model';
 import { GetCategoriesByLangCodeDto } from './dto/get-categories-by-lang-code.dto';
 import { GetCategoryByNameDto } from './dto/get-category-by-name.dto';
+import { Language } from '../languages/languages.model';
+import { col } from 'sequelize';
+import { UpdateCategoryDto } from './dto/update-category.dto';
 
 @Injectable()
 export class CategoriesService {
@@ -156,21 +159,32 @@ export class CategoriesService {
     if (!isCategoryExists)
       throw new HttpException('Category not found', HttpStatus.NOT_FOUND);
 
-    const enLangId = await this.languagesService.findLanguageByName('en');
-
-    const category = await this.categoryTranslationsModel.findOne({
-      attributes: ['category_name'],
+    const category = await this.categoryTranslationsModel.findAll({
+      attributes: [
+        [Sequelize.col('category_name'), 'categoryName'],
+        [Sequelize.col('language_code'), 'languageCode'],
+        [Sequelize.col('language.language_id'), 'languageId'],
+      ],
       where: {
         category_id: id,
-        language_id: enLangId,
       },
+      include: [
+        {
+          model: Language,
+          attributes: [],
+          as: 'language',
+        },
+      ],
     });
 
     return {
       statusCode: HttpStatus.OK,
       message: 'Category has been found',
       data: {
-        categoryName: category.category_name,
+        category: {
+          id,
+          translations: category,
+        },
       },
     };
   }
@@ -201,6 +215,44 @@ export class CategoriesService {
       data: {
         categoryName: translatedCategory.category_name,
       },
+    };
+  }
+
+  public async updateCategory(dto: UpdateCategoryDto) {
+    const isCategoryExists = await this.checkCategoryIdExists(dto.categoryId);
+
+    if (!isCategoryExists)
+      throw new HttpException('Category not found', HttpStatus.NOT_FOUND);
+
+    const isCategoryTranslationExists =
+      await this.categoryTranslationsModel.findOne({
+        where: {
+          category_id: dto.categoryId,
+          language_id: dto.languageId,
+        },
+      });
+
+    if (!isCategoryTranslationExists)
+      throw new HttpException(
+        'Category translation not found',
+        HttpStatus.NOT_FOUND,
+      );
+
+    await this.categoryTranslationsModel.update(
+      {
+        category_name: dto.categoryName.toLowerCase(),
+      },
+      {
+        where: {
+          category_id: dto.categoryId,
+          language_id: dto.languageId,
+        },
+      },
+    );
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Category has been updated',
     };
   }
 

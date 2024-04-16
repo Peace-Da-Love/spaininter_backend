@@ -12,6 +12,7 @@ import { LanguagesModule } from './languages/languages.module';
 import { NewsModule } from './news/news.module';
 import { MetadataModule } from './metadata/metadata.module';
 import { RoleModule } from './role/role.module';
+import { TelegramNewsletterModule } from './telegram-newsletter/telegram-newsletter.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { RoleModule } from './role/role.module';
     NewsModule,
     MetadataModule,
     RoleModule,
+    TelegramNewsletterModule,
   ],
 })
 export class AppModule {}

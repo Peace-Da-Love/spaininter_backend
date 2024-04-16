@@ -5,6 +5,7 @@ import { JwtService } from '@nestjs/jwt';
 import { InjectModel } from '@nestjs/sequelize';
 import { ITokens } from './types/ITokens';
 import { IJwtPayload, IPayload } from './types/IPayload';
+import { Transaction } from 'sequelize';
 
 @Injectable()
 export class TokenService {
@@ -89,7 +90,10 @@ export class TokenService {
     await token.destroy();
   };
 
-  public deleteAllTokens = async (adminId: number) => {
-    await this.tokenModel.destroy({ where: { admin_id: adminId } });
+  public deleteAllTokens = async (adminId: number, t?: Transaction | null) => {
+    await this.tokenModel.destroy({
+      where: { admin_id: adminId },
+      transaction: t,
+    });
   };
 }
