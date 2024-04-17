@@ -12,7 +12,7 @@ import { Type } from 'class-transformer';
 
 export class CreateNewsDto {
   @IsString()
-  @Length(1, 100)
+  @Length(5, 300)
   declare telegramShortText: string;
 
   @IsNumber()
