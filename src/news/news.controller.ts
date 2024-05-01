@@ -4,7 +4,7 @@ import {
   Delete,
   Get,
   HttpCode,
-  HttpStatus,
+  HttpStatus, Param,
   Post,
   Put,
   Query,
@@ -15,17 +15,26 @@ import { Auth } from '../auth/decorators/auth.decorator';
 import { GetNewsForAdminDto } from './dto/get-news-for-admin.dto';
 import { DeleteNewsDto } from './dto/delete-news.dto';
 import { GetNewsByFilterDto } from './dto/get-news-by-filter.dto';
-import { GetNewsDto } from './dto/get-news.dto';
+import { GetNewsByIdDto } from './dto/get-news-by-id.dto';
 import { GetRecommendedNewsDto } from './dto/get-recommended-news.dto';
 import { UpdateNewsDto } from './dto/update-news.dto';
+import { Headers } from '@nestjs/common';
+import { GetNewsDto } from './dto/get-news.dto';
 
 @Controller('news')
 export class NewsController {
   constructor(private readonly newsService: NewsService) {}
 
+  @Get(':id')
+  @HttpCode(HttpStatus.OK)
+  public async getNews(@Param() dto: GetNewsDto, @Headers() headers: any) {
+    console.log(headers['accept-language']);
+    return this.newsService.getNews(dto, headers['accept-language']);
+  }
+
   @Get()
   @HttpCode(HttpStatus.OK)
-  public async getNewsById(@Query() dto: GetNewsDto) {
+  public async getNewsById(@Query() dto: GetNewsByIdDto) {
     return this.newsService.getNewsById(dto);
   }
 

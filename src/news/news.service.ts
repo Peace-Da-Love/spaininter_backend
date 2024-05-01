@@ -12,13 +12,15 @@ import { GetNewsByFilterDto } from './dto/get-news-by-filter.dto';
 import { CategoriesService } from '../categories/categories.service';
 import { CategoryTranslations } from '../categories/category-translations.model';
 import { Category } from '../categories/categories.model';
-import { GetNewsDto } from './dto/get-news.dto';
+import { GetNewsByIdDto } from './dto/get-news-by-id.dto';
 import { GetRecommendedNewsDto } from './dto/get-recommended-news.dto';
 import { col } from 'sequelize';
 import { Sequelize } from 'sequelize-typescript';
 import { UpdateNewsDto } from './dto/update-news.dto';
 import { TelegramNewsletterService } from '../telegram-newsletter/telegram-newsletter.service';
 import { escapeSpecialCharacters } from '../common/utils';
+import { Language } from '../languages/languages.model';
+import { GetNewsDto } from './dto/get-news.dto';
 
 @Injectable()
 export class NewsService {
@@ -33,7 +35,77 @@ export class NewsService {
     private sequelize: Sequelize,
   ) {}
 
-  public async getNewsById(dto: GetNewsDto) {
+  public async getNews(dto: GetNewsDto, languageCode?: string) {
+    const id = Number(dto.id);
+    const news = await this.newsModel.findOne({
+      attributes: [
+        ['news_id', 'newsId'],
+        ['poster_link', 'posterLink'],
+        'city',
+        'province',
+        [col('newsTranslations.title'), 'title'],
+        [col('newsTranslations.content'), 'content'],
+        [col('newsTranslations.link'), 'link'],
+        [col('category.category_id'), 'categoryId'],
+        [col('category.categoryTranslations.category_name'), 'categoryName'],
+        'views',
+        'createdAt',
+        'updatedAt',
+      ],
+      where: { news_id: id },
+      include: [
+        {
+          attributes: [],
+          as: 'newsTranslations',
+          model: NewsTranslations,
+          include: [
+            {
+              attributes: [],
+              model: Language,
+              where: { language_code: languageCode.toLowerCase() ?? 'en' },
+            },
+          ],
+        },
+        {
+          attributes: [],
+          model: Category,
+          include: [
+            {
+              attributes: [],
+              as: 'categoryTranslations',
+              model: CategoryTranslations,
+              include: [
+                {
+                  model: Language,
+                  attributes: [],
+                  where: { language_code: languageCode.toLowerCase() ?? 'en' },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    if (!news) throw new HttpException('News not found', HttpStatus.NOT_FOUND);
+
+    await this.newsModel.update(
+      { views: news.views + 1 },
+      { where: { news_id: Number(id) } },
+    );
+
+    
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'News fetched successfully',
+      data: {
+        news,
+      },
+    };
+  }
+
+  public async getNewsById(dto: GetNewsByIdDto) {
     const { languageCode, id } = dto;
     const languageId =
       await this.languageService.findLanguageByName(languageCode);
@@ -372,8 +444,6 @@ export class NewsService {
       },
     };
   }
-
-  public async getLinks() {}
 
   private escapeJsonString(str: string) {
     return str
