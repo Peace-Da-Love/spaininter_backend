@@ -5,6 +5,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Param,
   Post,
   Put,
   Query,
@@ -14,19 +15,41 @@ import { CreateNewsDto } from './dto/create-news.dto';
 import { Auth } from '../auth/decorators/auth.decorator';
 import { GetNewsForAdminDto } from './dto/get-news-for-admin.dto';
 import { DeleteNewsDto } from './dto/delete-news.dto';
-import { GetNewsByFilterDto } from './dto/get-news-by-filter.dto';
-import { GetNewsDto } from './dto/get-news.dto';
-import { GetRecommendedNewsDto } from './dto/get-recommended-news.dto';
+import { GetNewsByIdDto } from './dto/get-news-by-id.dto';
 import { UpdateNewsDto } from './dto/update-news.dto';
+import { Headers } from '@nestjs/common';
+import { GetLatestNewsDto } from './dto/get-latest-news.dto';
+import { GetCategoryNewsDto } from './dto/get-category-news.dto';
 
 @Controller('news')
 export class NewsController {
   constructor(private readonly newsService: NewsService) {}
 
-  @Get()
+  @Get('site/:id')
   @HttpCode(HttpStatus.OK)
-  public async getNewsById(@Query() dto: GetNewsDto) {
-    return this.newsService.getNewsById(dto);
+  public async getNewsById(
+    @Param() dto: GetNewsByIdDto,
+    @Headers() headers: any,
+  ) {
+    return this.newsService.getNewsByIdForSite(dto, headers['accept-language']);
+  }
+
+  @Get('latest')
+  @HttpCode(HttpStatus.OK)
+  public async getLatestNews(
+    @Query() dto: GetLatestNewsDto,
+    @Headers() headers: any,
+  ) {
+    return this.newsService.getLatestNews(dto, headers['accept-language']);
+  }
+
+  @Get('filter')
+  @HttpCode(HttpStatus.OK)
+  public async filterNews(
+    @Query() dto: GetCategoryNewsDto,
+    @Headers() headers: any,
+  ) {
+    return this.newsService.getCategoryNews(dto, headers['accept-language']);
   }
 
   @Auth()
@@ -48,18 +71,6 @@ export class NewsController {
   @HttpCode(HttpStatus.OK)
   public async deleteNews(@Query() dto: DeleteNewsDto) {
     return this.newsService.deleteNews(dto);
-  }
-
-  @Get('news-by-filter')
-  @HttpCode(HttpStatus.OK)
-  public async getNewsByFilter(@Query() dto: GetNewsByFilterDto) {
-    return this.newsService.getNewsByFilter(dto);
-  }
-
-  @Get('recommended-news')
-  @HttpCode(HttpStatus.OK)
-  public async getRecommendedNews(@Query() dto: GetRecommendedNewsDto) {
-    return this.newsService.getRecommendedNews(dto);
   }
 
   @Auth()

@@ -11,7 +11,6 @@ import { News } from '../news/news.model';
 import { GetCategoriesByLangCodeDto } from './dto/get-categories-by-lang-code.dto';
 import { GetCategoryByNameDto } from './dto/get-category-by-name.dto';
 import { Language } from '../languages/languages.model';
-import { col } from 'sequelize';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 
 @Injectable()
