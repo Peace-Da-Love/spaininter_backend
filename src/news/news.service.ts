@@ -8,19 +8,18 @@ import { LanguagesService } from '../languages/languages.service';
 import { GetNewsForAdminDto } from './dto/get-news-for-admin.dto';
 import { linkFormatter } from '../common/utils/link-formatter';
 import { DeleteNewsDto } from './dto/delete-news.dto';
-import { GetNewsByFilterDto } from './dto/get-news-by-filter.dto';
 import { CategoriesService } from '../categories/categories.service';
 import { CategoryTranslations } from '../categories/category-translations.model';
 import { Category } from '../categories/categories.model';
-import { GetNewsByIdDto } from './dto/get-news-by-id.dto';
-import { GetRecommendedNewsDto } from './dto/get-recommended-news.dto';
-import { col } from 'sequelize';
+import { col, literal } from 'sequelize';
 import { Sequelize } from 'sequelize-typescript';
 import { UpdateNewsDto } from './dto/update-news.dto';
 import { TelegramNewsletterService } from '../telegram-newsletter/telegram-newsletter.service';
 import { escapeSpecialCharacters } from '../common/utils';
 import { Language } from '../languages/languages.model';
-import { GetNewsDto } from './dto/get-news.dto';
+import { GetNewsByIdDto } from './dto/get-news-by-id.dto';
+import { GetLatestNewsDto } from './dto/get-latest-news.dto';
+import { GetCategoryNewsDto } from './dto/get-category-news.dto';
 
 @Injectable()
 export class NewsService {
@@ -35,19 +34,24 @@ export class NewsService {
     private sequelize: Sequelize,
   ) {}
 
-  public async getNews(dto: GetNewsDto, languageCode?: string) {
+  public async getNewsByIdForSite(dto: GetNewsByIdDto, languageCode?: string) {
     const id = Number(dto.id);
     const news = await this.newsModel.findOne({
       attributes: [
         ['news_id', 'newsId'],
         ['poster_link', 'posterLink'],
         'city',
-        'province',
         [col('newsTranslations.title'), 'title'],
         [col('newsTranslations.content'), 'content'],
         [col('newsTranslations.link'), 'link'],
         [col('category.category_id'), 'categoryId'],
         [col('category.categoryTranslations.category_name'), 'categoryName'],
+        [
+          literal(
+            `REGEXP_REPLACE((SELECT category_name FROM category_translations WHERE category_translations.category_id = category.category_id AND category_translations.language_id = (SELECT language_id FROM languages WHERE language_code = 'en')), '[^a-zA-Z0-9]', '-', 'g')`,
+          ),
+          'categoryLink',
+        ],
         'views',
         'createdAt',
         'updatedAt',
@@ -94,8 +98,6 @@ export class NewsService {
       { where: { news_id: Number(id) } },
     );
 
-    
-
     return {
       statusCode: HttpStatus.OK,
       message: 'News fetched successfully',
@@ -105,51 +107,166 @@ export class NewsService {
     };
   }
 
-  public async getNewsById(dto: GetNewsByIdDto) {
-    const { languageCode, id } = dto;
-    const languageId =
-      await this.languageService.findLanguageByName(languageCode);
+  public async getLatestNews(dto: GetLatestNewsDto, languageCode?: string) {
+    const page = Number(dto.page) || 1;
+    const limit = Number(dto.limit) || 10;
+    const offset = (page - 1) * limit;
 
-    const news = await this.newsModel.findOne({
-      where: { news_id: Number(id) },
+    const news = await this.newsModel.findAll({
+      limit,
+      offset,
       attributes: [
-        'news_id',
-        'views',
-        'poster_link',
+        ['news_id', 'newsId'],
         'city',
-        'province',
+        [col('newsTranslations.title'), 'title'],
+        [col('newsTranslations.link'), 'link'],
+        [col('category.categoryTranslations.category_name'), 'categoryName'],
+        [
+          literal(
+            `REGEXP_REPLACE((SELECT category_name FROM category_translations WHERE category_translations.category_id = category.category_id AND category_translations.language_id = (SELECT language_id FROM languages WHERE language_code = 'en')), '[^a-zA-Z0-9]', '-', 'g')`,
+          ),
+          'categoryLink',
+        ],
+        ['poster_link', 'posterLink'],
         'createdAt',
       ],
       include: [
         {
+          as: 'newsTranslations',
           model: NewsTranslations,
-          where: { language_id: languageId },
-          attributes: ['title', 'content', 'link', 'description'],
-        },
-        {
-          model: Category,
-          as: 'category',
-          attributes: ['category_id'],
+          attributes: [],
           include: [
             {
+              model: Language,
+              attributes: [],
+              where: { language_code: languageCode.toLowerCase() ?? 'en' },
+            },
+          ],
+        },
+        {
+          attributes: [],
+          as: 'category',
+          model: Category,
+          include: [
+            {
+              as: 'categoryTranslations',
               model: CategoryTranslations,
-              where: { language_id: languageId },
-              attributes: ['category_name'],
+              attributes: [],
+              include: [
+                {
+                  model: Language,
+                  attributes: [],
+                  where: { language_code: languageCode.toLowerCase() ?? 'en' },
+                },
+              ],
             },
           ],
         },
       ],
+      subQuery: false,
+      order: [['createdAt', 'DESC']],
     });
 
-    if (!news) throw new HttpException('News not found', HttpStatus.NOT_FOUND);
-
-    news.views += 1;
-    await news.save();
+    const newsCount = await this.newsModel.count();
+    const pageCount = Math.ceil(newsCount / limit);
+    const hasNextPage = page < pageCount;
+    const hasPreviousPage = page > 1;
 
     return {
       statusCode: HttpStatus.OK,
       message: 'News fetched successfully',
-      data: { news },
+      data: {
+        currentPage: page,
+        pageCount,
+        hasNextPage,
+        hasPreviousPage,
+        news,
+      },
+    };
+  }
+
+  public async getCategoryNews(dto: GetCategoryNewsDto, languageCode?: string) {
+    const page = Number(dto.page) || 1;
+    const limit = Number(dto.limit) || 10;
+    const offset = (page - 1) * limit;
+
+    const categoryName = dto.category.toLowerCase().replace(/-/g, '/');
+    const category =
+      await this.categoryService.findCategoryByName(categoryName);
+
+    const news = await this.newsModel.findAll({
+      limit,
+      offset,
+      where: { category_id: category },
+      attributes: [
+        ['news_id', 'newsId'],
+        'city',
+        [col('newsTranslations.title'), 'title'],
+        [col('newsTranslations.link'), 'link'],
+        [col('category.categoryTranslations.category_name'), 'categoryName'],
+        [
+          literal(
+            `REGEXP_REPLACE((SELECT category_name FROM category_translations WHERE category_translations.category_id = category.category_id AND category_translations.language_id = (SELECT language_id FROM languages WHERE language_code = 'en')), '[^a-zA-Z0-9]', '-', 'g')`,
+          ),
+          'categoryLink',
+        ],
+        ['poster_link', 'posterLink'],
+        'createdAt',
+      ],
+      include: [
+        {
+          as: 'newsTranslations',
+          model: NewsTranslations,
+          attributes: [],
+          include: [
+            {
+              model: Language,
+              attributes: [],
+              where: { language_code: languageCode.toLowerCase() ?? 'en' },
+            },
+          ],
+        },
+        {
+          attributes: [],
+          as: 'category',
+          model: Category,
+          include: [
+            {
+              as: 'categoryTranslations',
+              model: CategoryTranslations,
+              attributes: [],
+              include: [
+                {
+                  model: Language,
+                  attributes: [],
+                  where: { language_code: languageCode.toLowerCase() ?? 'en' },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+      subQuery: false,
+      order: [['createdAt', 'DESC']],
+    });
+
+    const newsCount = await this.newsModel.count({
+      where: { category_id: category },
+    });
+    const pageCount = Math.ceil(newsCount / limit);
+    const hasNextPage = page < pageCount;
+    const hasPreviousPage = page > 1;
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'News fetched successfully',
+      data: {
+        currentPage: page,
+        pageCount,
+        hasNextPage,
+        hasPreviousPage,
+        news,
+      },
     };
   }
 
@@ -294,154 +411,6 @@ export class NewsService {
     return {
       statusCode: HttpStatus.OK,
       message: 'News updated successfully',
-    };
-  }
-
-  public async getRecommendedNews(dto: GetRecommendedNewsDto) {
-    const page = Number(dto.page) || 1;
-    const limit = Number(dto.limit) || 10;
-    const offset = (page - 1) * limit;
-    const languageCode = dto.languageCode;
-    const languageId =
-      await this.languageService.findLanguageByName(languageCode);
-
-    const news = await this.newsModel.findAndCountAll({
-      limit,
-      offset,
-      order: [['views', 'DESC']],
-      include: [
-        {
-          model: NewsTranslations,
-          attributes: ['title', 'link'],
-          where: { language_id: languageId },
-        },
-        {
-          model: Category,
-          as: 'category',
-          attributes: ['category_id'],
-          include: [
-            {
-              model: CategoryTranslations,
-              where: { language_id: languageId },
-              attributes: ['category_name'],
-            },
-          ],
-        },
-      ],
-      attributes: ['news_id', 'createdAt', 'poster_link', 'views'],
-    });
-
-    const pages = Math.ceil(news.count / limit);
-
-    return {
-      statusCode: HttpStatus.OK,
-      message: 'News fetched successfully',
-      data: {
-        news: {
-          page,
-          pages,
-          ...news,
-        },
-      },
-    };
-  }
-
-  public async getNewsByFilter(dto: GetNewsByFilterDto) {
-    const { search } = dto;
-    const page = Number(dto.page) || 1;
-    const limit = Number(dto.limit) || 10;
-    const offset = (page - 1) * limit;
-    const languageCode = dto.languageCode || 'en';
-    const languageId =
-      await this.languageService.findLanguageByName(languageCode);
-
-    if (search === 'latest' || !search) {
-      const latestNews = await this.newsModel.findAndCountAll({
-        limit,
-        offset,
-        order: [['createdAt', 'DESC']],
-        include: [
-          {
-            model: NewsTranslations,
-            attributes: ['title', 'link'],
-            where: { language_id: languageId },
-          },
-          {
-            model: Category,
-            as: 'category',
-            attributes: ['category_id'],
-            include: [
-              {
-                model: CategoryTranslations,
-                where: { language_id: languageId },
-                attributes: ['category_name'],
-              },
-            ],
-          },
-        ],
-        attributes: ['news_id', 'createdAt', 'poster_link'],
-      });
-      const pages = Math.ceil(latestNews.count / limit);
-
-      return {
-        statusCode: HttpStatus.OK,
-        message: 'News fetched successfully',
-        data: {
-          news: {
-            page,
-            pages,
-            categoryName: 'latest',
-            ...latestNews,
-          },
-        },
-      };
-    }
-
-    const categoryId = await this.categoryService.findCategoryByName(search);
-    const categoryName =
-      await this.categoryService.findCategoryById(categoryId);
-
-    const news = await this.newsModel.findAndCountAll({
-      limit,
-      offset,
-      include: [
-        {
-          model: NewsTranslations,
-          attributes: ['title', 'link'],
-          where: { language_id: languageId },
-        },
-        {
-          model: Category,
-          as: 'category',
-          attributes: ['category_id'],
-          include: [
-            {
-              model: CategoryTranslations,
-              where: { language_id: languageId },
-              attributes: ['category_name'],
-            },
-          ],
-        },
-      ],
-      where: {
-        category_id: categoryId,
-      },
-      attributes: ['news_id', 'createdAt', 'poster_link'],
-    });
-
-    const pages = Math.ceil(news.count / limit);
-
-    return {
-      statusCode: HttpStatus.OK,
-      message: 'News fetched successfully',
-      data: {
-        news: {
-          page,
-          pages,
-          categoryName,
-          ...news,
-        },
-      },
     };
   }
 
