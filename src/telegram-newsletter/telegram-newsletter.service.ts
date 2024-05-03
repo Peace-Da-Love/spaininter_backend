@@ -55,7 +55,7 @@ export class TelegramNewsletterService {
   }
 
   // send newsletter
-  public async sendNewsletter(text: string, link: string) {
+  public async sendNewsletter(text: string) {
     const NEWSLETTER_BOT_TOKEN = this.configService.get('NEWSLETTER_BOT_TOKEN');
 
     const channels = await this.tgChannelModel.findAll({

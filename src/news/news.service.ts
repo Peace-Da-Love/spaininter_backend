@@ -323,7 +323,7 @@ export class NewsService {
       const tgMessage = `[${enTitle}](${utmLink})\n\n${escapeSpecialCharacters(
         dto.telegramShortText,
       )}`;
-      await this.telegramNewsletterService.sendNewsletter(tgMessage, utmLink);
+      await this.telegramNewsletterService.sendNewsletter(tgMessage);
       await t.commit();
     } catch (err) {
       await t.rollback();
