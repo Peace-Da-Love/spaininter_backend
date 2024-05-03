@@ -41,6 +41,7 @@ export class NewsService {
         ['news_id', 'newsId'],
         ['poster_link', 'posterLink'],
         'city',
+        ['ad_link', 'adLink'],
         [col('newsTranslations.title'), 'title'],
         [col('newsTranslations.content'), 'content'],
         [col('newsTranslations.link'), 'link'],
@@ -66,7 +67,7 @@ export class NewsService {
             {
               attributes: [],
               model: Language,
-              where: { language_code: languageCode.toLowerCase() ?? 'en' },
+              where: { language_code: languageCode ?? 'en' },
             },
           ],
         },
@@ -82,7 +83,7 @@ export class NewsService {
                 {
                   model: Language,
                   attributes: [],
-                  where: { language_code: languageCode.toLowerCase() ?? 'en' },
+                  where: { language_code: languageCode ?? 'en' },
                 },
               ],
             },
@@ -97,6 +98,75 @@ export class NewsService {
       { views: news.views + 1 },
       { where: { news_id: Number(id) } },
     );
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'News fetched successfully',
+      data: {
+        news,
+      },
+    };
+  }
+
+  public async getNewsByIdForAdmin(dto: GetNewsByIdDto, languageCode?: string) {
+    const id = Number(dto.id);
+    const news = await this.newsModel.findOne({
+      attributes: [
+        ['news_id', 'newsId'],
+        ['poster_link', 'posterLink'],
+        'city',
+        [col('newsTranslations.title'), 'title'],
+        [col('newsTranslations.description'), 'description'],
+        [col('newsTranslations.content'), 'content'],
+        [col('newsTranslations.link'), 'link'],
+        [col('category.category_id'), 'categoryId'],
+        [col('category.categoryTranslations.category_name'), 'categoryName'],
+        [
+          literal(
+            `REGEXP_REPLACE((SELECT category_name FROM category_translations WHERE category_translations.category_id = category.category_id AND category_translations.language_id = (SELECT language_id FROM languages WHERE language_code = 'en')), '[^a-zA-Z0-9]', '-', 'g')`,
+          ),
+          'categoryLink',
+        ],
+        'views',
+        'createdAt',
+        'updatedAt',
+      ],
+      where: { news_id: id },
+      include: [
+        {
+          attributes: [],
+          as: 'newsTranslations',
+          model: NewsTranslations,
+          include: [
+            {
+              attributes: [],
+              model: Language,
+              where: { language_code: languageCode ?? 'en' },
+            },
+          ],
+        },
+        {
+          attributes: [],
+          model: Category,
+          include: [
+            {
+              attributes: [],
+              as: 'categoryTranslations',
+              model: CategoryTranslations,
+              include: [
+                {
+                  model: Language,
+                  attributes: [],
+                  where: { language_code: languageCode ?? 'en' },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    if (!news) throw new HttpException('News not found', HttpStatus.NOT_FOUND);
 
     return {
       statusCode: HttpStatus.OK,
@@ -139,7 +209,7 @@ export class NewsService {
             {
               model: Language,
               attributes: [],
-              where: { language_code: languageCode.toLowerCase() ?? 'en' },
+              where: { language_code: languageCode ?? 'en' },
             },
           ],
         },
@@ -156,7 +226,7 @@ export class NewsService {
                 {
                   model: Language,
                   attributes: [],
-                  where: { language_code: languageCode.toLowerCase() ?? 'en' },
+                  where: { language_code: languageCode ?? 'en' },
                 },
               ],
             },
@@ -222,7 +292,7 @@ export class NewsService {
             {
               model: Language,
               attributes: [],
-              where: { language_code: languageCode.toLowerCase() ?? 'en' },
+              where: { language_code: languageCode ?? 'en' },
             },
           ],
         },
@@ -239,7 +309,7 @@ export class NewsService {
                 {
                   model: Language,
                   attributes: [],
-                  where: { language_code: languageCode.toLowerCase() ?? 'en' },
+                  where: { language_code: languageCode ?? 'en' },
                 },
               ],
             },
@@ -300,6 +370,7 @@ export class NewsService {
         poster_link: dto.poster_link,
         province: dto.province,
         city: dto.city,
+        ad_link: dto.ad_link,
       });
 
       const translations = dto.translations.map((translation) => {

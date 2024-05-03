@@ -30,6 +30,11 @@ export class CreateNewsDto {
   @Length(1, 50)
   city: string;
 
+  @IsOptional()
+  @IsString()
+  @Length(1, 100)
+  ad_link: string;
+
   @IsArray()
   @ArrayMinSize(1)
   @ValidateNested({ each: true })

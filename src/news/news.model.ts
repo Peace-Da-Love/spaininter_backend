@@ -19,6 +19,7 @@ interface NewsCreationAttrs {
   province: string;
   city: string;
   admin_id: number;
+  ad_link: string;
 }
 
 @Table({ tableName: 'news' })
@@ -47,6 +48,9 @@ export class News extends Model<News, NewsCreationAttrs> {
 
   @Column({ type: DataType.INTEGER, allowNull: false, defaultValue: 0 })
   declare views: number;
+
+  @Column({ type: DataType.STRING, allowNull: true })
+  declare ad_link: string;
 
   @ForeignKey(() => Admin)
   @Column({

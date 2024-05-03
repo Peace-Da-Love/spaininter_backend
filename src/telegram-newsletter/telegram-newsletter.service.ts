@@ -4,8 +4,6 @@ import { TgChannel } from './telegram-newsletter.model';
 import { InjectModel } from '@nestjs/sequelize';
 import { DeleteChannelDto } from './dto/delete-channel.dto';
 import { ConfigService } from '@nestjs/config';
-import axios from 'axios';
-import { TG_API_URL } from '../common/constance';
 import { col } from 'sequelize';
 import { Markup, Telegraf } from 'telegraf';
 
