@@ -34,6 +34,19 @@ export class NewsController {
     return this.newsService.getNewsByIdForSite(dto, headers['accept-language']);
   }
 
+  @Auth()
+  @Get('admin/:id')
+  @HttpCode(HttpStatus.OK)
+  public async getNewsByIdForAdmin(
+    @Param() dto: GetNewsByIdDto,
+    @Headers() headers: any,
+  ) {
+    return this.newsService.getNewsByIdForAdmin(
+      dto,
+      headers['accept-language'],
+    );
+  }
+
   @Get('latest')
   @HttpCode(HttpStatus.OK)
   public async getLatestNews(

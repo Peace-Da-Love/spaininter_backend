@@ -13,7 +13,6 @@ import {
 import { Response, Request } from 'express';
 import { AuthService } from './auth.service';
 import { RegisterAdminDto } from './dto/register-admin.dto';
-import { Auth } from './decorators/auth.decorator';
 import { LoginDto } from './dto/login.dto';
 import { DeleteAdminDto } from './dto/delete-admin.dto';
 import { GetAdminsDto } from './dto/get-admins.dto';
