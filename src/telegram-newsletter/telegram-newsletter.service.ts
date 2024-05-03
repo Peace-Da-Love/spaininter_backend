@@ -4,8 +4,6 @@ import { TgChannel } from './telegram-newsletter.model';
 import { InjectModel } from '@nestjs/sequelize';
 import { DeleteChannelDto } from './dto/delete-channel.dto';
 import { ConfigService } from '@nestjs/config';
-import axios from 'axios';
-import { TG_API_URL } from '../common/constance';
 import { col } from 'sequelize';
 import { Markup, Telegraf } from 'telegraf';
 
@@ -71,9 +69,6 @@ export class TelegramNewsletterService {
       try {
         await bot.telegram.sendMessage(`-${channel.channel_id}`, text, {
           parse_mode: 'MarkdownV2',
-          reply_markup: {
-            inline_keyboard: [[Markup.button.url('Full', link)]],
-          },
         });
       } catch (err) {
         console.error(err);
