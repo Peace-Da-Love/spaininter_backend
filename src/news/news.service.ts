@@ -319,11 +319,11 @@ export class NewsService {
         translations.find((t) => t.language_id === enLangId).title,
       );
       const enLink = translations.find((t) => t.language_id === enLangId).link;
-      const ivLink = `https://t.me/iv?url=https://spaininter.com/en/news/${enLink}&rhash=66ac0b9968d595`;
-      const tgMessage = `[${enTitle}](${ivLink})\n\n${escapeSpecialCharacters(
+      const utmLink = `https://spaininter.com/en/news/${enLink}?utm_source=telegram&utm_medium=article`;
+      const tgMessage = `[${enTitle}](${utmLink})\n\n${escapeSpecialCharacters(
         dto.telegramShortText,
       )}`;
-      await this.telegramNewsletterService.sendNewsletter(tgMessage);
+      await this.telegramNewsletterService.sendNewsletter(tgMessage, utmLink);
       await t.commit();
     } catch (err) {
       await t.rollback();

@@ -7,6 +7,7 @@ import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { TG_API_URL } from '../common/constance';
 import { col } from 'sequelize';
+import { Markup, Telegraf } from 'telegraf';
 
 @Injectable()
 export class TelegramNewsletterService {
@@ -56,31 +57,24 @@ export class TelegramNewsletterService {
   }
 
   // send newsletter
-  public async sendNewsletter(text: string) {
+  public async sendNewsletter(text: string, link: string) {
     const NEWSLETTER_BOT_TOKEN = this.configService.get('NEWSLETTER_BOT_TOKEN');
 
     const channels = await this.tgChannelModel.findAll({
       attributes: ['channel_id'],
     });
 
+    const bot = new Telegraf(NEWSLETTER_BOT_TOKEN);
+
     // send newsletter to all channels
     for (const channel of channels) {
       try {
-        const formData = new FormData();
-        formData.append('chat_id', `-${channel.channel_id}`);
-        formData.append('text', text);
-        formData.append('parse_mode', 'MarkdownV2');
-
-        console.log(formData, 'formData');
-        await axios.post(
-          `${TG_API_URL + NEWSLETTER_BOT_TOKEN}/sendMessage`,
-          formData,
-          {
-            headers: {
-              'Content-Type': 'multipart/form-data',
-            },
+        await bot.telegram.sendMessage(`-${channel.channel_id}`, text, {
+          parse_mode: 'MarkdownV2',
+          reply_markup: {
+            inline_keyboard: [[Markup.button.url('Full', link)]],
           },
-        );
+        });
       } catch (err) {
         console.error(err);
       }
