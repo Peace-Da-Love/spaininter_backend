@@ -115,6 +115,7 @@ export class NewsService {
         ['news_id', 'newsId'],
         ['poster_link', 'posterLink'],
         'city',
+        ['ad_link', 'adLink'],
         [col('newsTranslations.title'), 'title'],
         [col('newsTranslations.description'), 'description'],
         [col('newsTranslations.content'), 'content'],
@@ -470,14 +471,38 @@ export class NewsService {
         HttpStatus.NOT_FOUND,
       );
 
-    await this.newsTranslationsModel.update(
-      {
-        title: dto.title,
-        description: dto.description,
-        content: dto.content,
-      },
-      { where: { news_id: dto.newsId, language_id: dto.languageId } },
-    );
+    const t = await this.sequelize.transaction();
+
+    try {
+      await this.newsModel.update(
+        {
+          ad_link: dto.adLink.length > 0 ? dto.adLink : null,
+        },
+        { where: { news_id: dto.newsId }, transaction: t },
+      );
+
+      const content = dto.content
+        ? { content: this.escapeJsonString(dto.content) }
+        : {};
+
+      await this.newsTranslationsModel.update(
+        {
+          title: dto.title,
+          description: dto.description,
+          ...content,
+        },
+        {
+          where: { news_id: dto.newsId, language_id: dto.languageId },
+          transaction: t,
+        },
+      );
+
+      await t.commit();
+    } catch (err) {
+      console.error(err);
+      await t.rollback();
+      throw new HttpException('Failed to update news', HttpStatus.BAD_REQUEST);
+    }
 
     return {
       statusCode: HttpStatus.OK,
