@@ -476,20 +476,16 @@ export class NewsService {
     try {
       await this.newsModel.update(
         {
-          ad_link: dto.adLink.length > 0 ? dto.adLink : null,
+          ad_link: dto.adLink,
         },
         { where: { news_id: dto.newsId }, transaction: t },
       );
-
-      const content = dto.content
-        ? { content: this.escapeJsonString(dto.content) }
-        : {};
 
       await this.newsTranslationsModel.update(
         {
           title: dto.title,
           description: dto.description,
-          ...content,
+          content: dto.content,
         },
         {
           where: { news_id: dto.newsId, language_id: dto.languageId },
