@@ -1,18 +1,56 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { AddChannelDto } from './dto/add-channel.dto';
 import { TgChannel } from './telegram-newsletter.model';
 import { InjectModel } from '@nestjs/sequelize';
 import { DeleteChannelDto } from './dto/delete-channel.dto';
 import { ConfigService } from '@nestjs/config';
 import { col } from 'sequelize';
-import { Markup, Telegraf } from 'telegraf';
+import { Telegraf } from 'telegraf';
+import { SendApplicationDto } from './dto/send-application.dto';
+import { validateRecaptcha } from '../common/utils';
 
 @Injectable()
 export class TelegramNewsletterService {
+  private readonly BOT_TOKEN: string;
+  private readonly BOT: Telegraf;
+
   constructor(
     @InjectModel(TgChannel) private tgChannelModel: typeof TgChannel,
     private readonly configService: ConfigService,
-  ) {}
+  ) {
+    this.BOT_TOKEN = this.configService.get('NEWSLETTER_BOT_TOKEN');
+    this.BOT = new Telegraf(this.BOT_TOKEN);
+  }
+
+  public async sendApplication(dto: SendApplicationDto) {
+    const { email, phone, url, token } = dto;
+
+    if (!email && !phone)
+      throw new HttpException(
+        'Email or phone is required',
+        HttpStatus.BAD_REQUEST,
+      );
+    const isCaptchaValid = await validateRecaptcha(token);
+
+    if (!isCaptchaValid)
+      throw new HttpException(
+        'Your request looks like a bot',
+        HttpStatus.FORBIDDEN,
+      );
+
+    const userData = `${email ? `Email: ${email}\n` : ''}${phone ? `Phone: ${phone}\n` : ''}`;
+    const text = `${userData}URL: ${url}`;
+    await this.BOT.telegram.sendMessage('-1002105166723', text, {
+      parse_mode: 'Markdown',
+      link_preview_options: {
+        is_disabled: true,
+      },
+    });
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Application sent successfully',
+    };
+  }
 
   // create channel
   public async addChannel(dto: AddChannelDto) {
@@ -56,18 +94,14 @@ export class TelegramNewsletterService {
 
   // send newsletter
   public async sendNewsletter(text: string) {
-    const NEWSLETTER_BOT_TOKEN = this.configService.get('NEWSLETTER_BOT_TOKEN');
-
     const channels = await this.tgChannelModel.findAll({
       attributes: ['channel_id'],
     });
 
-    const bot = new Telegraf(NEWSLETTER_BOT_TOKEN);
-
     // send newsletter to all channels
     for (const channel of channels) {
       try {
-        await bot.telegram.sendMessage(`-${channel.channel_id}`, text, {
+        await this.BOT.telegram.sendMessage(`-${channel.channel_id}`, text, {
           parse_mode: 'MarkdownV2',
         });
       } catch (err) {

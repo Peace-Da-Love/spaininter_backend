@@ -12,12 +12,19 @@ import { TelegramNewsletterService } from './telegram-newsletter.service';
 import { Auth } from '../auth/decorators/auth.decorator';
 import { AddChannelDto } from './dto/add-channel.dto';
 import { DeleteChannelDto } from './dto/delete-channel.dto';
+import { SendApplicationDto } from './dto/send-application.dto';
 
 @Controller('channels')
 export class TelegramNewsletterController {
   constructor(
     private readonly telegramNewsletterService: TelegramNewsletterService,
   ) {}
+
+  @Post('send-application')
+  @HttpCode(HttpStatus.OK)
+  public async sendApplication(@Body() dto: SendApplicationDto) {
+    return await this.telegramNewsletterService.sendApplication(dto);
+  }
 
   @Auth()
   @Get()
