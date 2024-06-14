@@ -13,12 +13,14 @@ import { NewsModule } from './news/news.module';
 import { MetadataModule } from './metadata/metadata.module';
 import { RoleModule } from './role/role.module';
 import { TelegramNewsletterModule } from './telegram-newsletter/telegram-newsletter.module';
+import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       envFilePath: ['.env'],
     }),
+    ScheduleModule.forRoot(),
     SequelizeModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

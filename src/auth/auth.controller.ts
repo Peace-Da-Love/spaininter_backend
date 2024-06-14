@@ -34,7 +34,7 @@ export class AuthController {
     } = await this.authService.login(dto);
     res.cookie('refresh_token', refresh_token, {
       httpOnly: true,
-      maxAge: 1000 * 60 * 60 * 24 * 15,
+      maxAge: 1000 * 60 * 60 * 24 * 30,
     });
     return { ...rest, data: { accessToken: access_token } };
   }
@@ -52,7 +52,7 @@ export class AuthController {
     } = await this.authService.refresh(validatedToken);
     res.cookie('refresh_token', refresh_token, {
       httpOnly: true,
-      maxAge: 1000 * 60 * 60 * 24 * 15,
+      maxAge: 1000 * 60 * 60 * 24 * 30, // 30 days
     });
     return { ...rest, data: { accessToken: access_token } };
   }

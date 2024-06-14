@@ -5,7 +5,7 @@ import { JwtService } from '@nestjs/jwt';
 import { InjectModel } from '@nestjs/sequelize';
 import { ITokens } from './types/ITokens';
 import { IJwtPayload, IPayload } from './types/IPayload';
-import { Transaction } from 'sequelize';
+import { Op, Transaction } from 'sequelize';
 
 @Injectable()
 export class TokenService {
@@ -32,7 +32,7 @@ export class TokenService {
     };
 
     const refresh_token = await this.jwtService.signAsync(updatedPayload, {
-      expiresIn: '15d',
+      expiresIn: '30d',
       secret: this.JWT_REFRESH_SECRET,
     });
 
@@ -94,6 +94,17 @@ export class TokenService {
     await this.tokenModel.destroy({
       where: { admin_id: adminId },
       transaction: t,
+    });
+  };
+
+  public deleteExpiredTokens = async (): Promise<number> => {
+    const date30DaysAgo = new Date(Date.now() - 1000 * 60 * 60 * 24 * 30);
+    return await this.tokenModel.destroy({
+      where: {
+        createdAt: {
+          [Op.lt]: date30DaysAgo,
+        },
+      },
     });
   };
 }

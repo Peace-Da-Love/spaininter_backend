@@ -1,10 +1,11 @@
-import { forwardRef, Module } from '@nestjs/common';
+import { forwardRef, Logger, Module } from '@nestjs/common';
 import { TokenService } from './token.service';
 import { SequelizeModule } from '@nestjs/sequelize';
 import { Token } from './token.model';
 import { ConfigModule } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { AuthModule } from '../auth/auth.module';
+import { TokenScheduleService } from './token.schedule';
 
 @Module({
   imports: [
@@ -13,7 +14,7 @@ import { AuthModule } from '../auth/auth.module';
     JwtModule.register({}),
     ConfigModule,
   ],
-  providers: [TokenService],
+  providers: [TokenService, TokenScheduleService, Logger],
   exports: [TokenService],
 })
 export class TokenModule {}
