@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { SequelizeModule } from '@nestjs/sequelize';
 import { postgresConfig } from './common/configs';
@@ -14,6 +14,7 @@ import { MetadataModule } from './metadata/metadata.module';
 import { RoleModule } from './role/role.module';
 import { TelegramNewsletterModule } from './telegram-newsletter/telegram-newsletter.module';
 import { ScheduleModule } from '@nestjs/schedule';
+import { HttpLoggerMiddleware } from './common/middlewares';
 
 @Module({
   imports: [
@@ -41,4 +42,9 @@ import { ScheduleModule } from '@nestjs/schedule';
     TelegramNewsletterModule,
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(HttpLoggerMiddleware).forRoutes('*');
+  }
+}
+
