@@ -26,7 +26,7 @@ export class TelegramNewsletterController {
     return await this.telegramNewsletterService.sendApplication(dto);
   }
 
-  // @Auth()
+  @Auth()
   @Get()
   @HttpCode(HttpStatus.OK)
   public async getChannels(@Query('city_id') city_id: string) {
@@ -35,14 +35,14 @@ export class TelegramNewsletterController {
     });
   }
 
-  // @Auth()
+  @Auth()
   @Post()
   @HttpCode(HttpStatus.CREATED)
   public async addChannel(@Body() dto: AddChannelDto) {
     return await this.telegramNewsletterService.addChannel(dto);
   }
 
-  // @Auth()
+  @Auth()
   @Delete()
   @HttpCode(HttpStatus.OK)
   public async deleteChannel(@Query() dto: DeleteChannelDto) {

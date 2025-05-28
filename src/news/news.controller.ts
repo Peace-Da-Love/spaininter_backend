@@ -34,7 +34,7 @@ export class NewsController {
     return this.newsService.getNewsByIdForSite(dto, headers['accept-language']);
   }
 
-  // @Auth()
+  @Auth()
   @Get('admin/:id')
   @HttpCode(HttpStatus.OK)
   public async getNewsByIdForAdmin(
@@ -65,28 +65,28 @@ export class NewsController {
     return this.newsService.getCategoryNews(dto, headers['accept-language']);
   }
 
-  // @Auth()
+  @Auth()
   @Post('create')
   @HttpCode(HttpStatus.CREATED)
   public async createNews(@Body() dto: CreateNewsDto) {
     return this.newsService.createNews(dto);
   }
 
-  // @Auth()
+  @Auth()
   @Get('get-for-admin')
   @HttpCode(HttpStatus.OK)
   public async getNewsForAdmin(@Query() dto: GetNewsForAdminDto) {
     return this.newsService.getNewsForAdmin(dto);
   }
 
-  // @Auth()
+  @Auth()
   @Delete('delete')
   @HttpCode(HttpStatus.OK)
   public async deleteNews(@Query() dto: DeleteNewsDto) {
     return this.newsService.deleteNews(dto);
   }
 
-  // @Auth()
+  @Auth()
   @Put('update')
   @HttpCode(HttpStatus.OK)
   public async updateNews(@Body() dto: UpdateNewsDto) {
