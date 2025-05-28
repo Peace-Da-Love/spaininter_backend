@@ -26,10 +26,11 @@
     "@nestjs/core": "^10.0.0",
     "@nestjs/jwt": "^10.2.0",
     "@nestjs/passport": "^10.0.3",
-    "@nestjs/platform-express": "^10.0.0",
+    "@nestjs/platform-express": "^10.4.18",
     "@nestjs/schedule": "^4.0.2",
     "@nestjs/sequelize": "^10.0.1",
     "@types/passport-jwt": "^4.0.1",
+    "@types/uuid": "^10.0.0",
     "axios": "^1.6.7",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
@@ -41,8 +42,10 @@
     "rxjs": "^7.8.1",
     "sequelize": "^6.37.1",
     "sequelize-typescript": "^2.1.6",
+    "serve-static": "^2.2.0",
     "sharp": "^0.33.2",
-    "transliteration": "^2.3.5"
+    "transliteration": "^2.3.5",
+    "uuid": "^11.1.0"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.0.0",

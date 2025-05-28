@@ -22,14 +22,14 @@ import { UpdateCategoryDto } from './dto/update-category.dto';
 export class CategoriesController {
   constructor(private readonly categoriesService: CategoriesService) {}
 
-  @Auth()
+  // @Auth()
   @Post('create')
   @HttpCode(HttpStatus.CREATED)
   public async createCategory(@Body() dto: CreateCategoryDto) {
     return this.categoriesService.createCategory(dto);
   }
 
-  @Auth()
+  // @Auth()
   @Delete('delete')
   @HttpCode(HttpStatus.OK)
   public async deleteCategory(@Query() dto: DeleteCategoryDto) {
@@ -62,7 +62,7 @@ export class CategoriesController {
     return this.categoriesService.getCategoryByName(dto);
   }
 
-  @Auth()
+  // @Auth()
   @Put('update')
   @HttpCode(HttpStatus.OK)
   public async updateCategory(@Body() dto: UpdateCategoryDto) {
