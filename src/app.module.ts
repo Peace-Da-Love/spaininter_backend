@@ -15,6 +15,7 @@ import { RoleModule } from './role/role.module';
 import { TelegramNewsletterModule } from './telegram-newsletter/telegram-newsletter.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { HttpLoggerMiddleware } from './common/middlewares';
+import { CitiesModule } from './cities/cities.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { HttpLoggerMiddleware } from './common/middlewares';
     BotModule,
     GoogleStorageModule,
     CategoriesModule,
+    CitiesModule,
     LanguagesModule,
     NewsModule,
     MetadataModule,

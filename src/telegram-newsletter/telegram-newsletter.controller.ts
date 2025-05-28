@@ -29,8 +29,10 @@ export class TelegramNewsletterController {
   @Auth()
   @Get()
   @HttpCode(HttpStatus.OK)
-  public async getChannels() {
-    return await this.telegramNewsletterService.getChannels();
+  public async getChannels(@Query('city_id') city_id: string) {
+    return await this.telegramNewsletterService.getChannels({
+      city_id: city_id ? +city_id : undefined,
+    });
   }
 
   @Auth()

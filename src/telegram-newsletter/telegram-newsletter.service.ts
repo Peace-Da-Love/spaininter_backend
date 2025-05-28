@@ -8,6 +8,7 @@ import { col } from 'sequelize';
 import { Telegraf } from 'telegraf';
 import { SendApplicationDto } from './dto/send-application.dto';
 import { validateRecaptcha } from '../common/utils';
+import { City } from '../cities/cities.entity';
 
 @Injectable()
 export class TelegramNewsletterService {
@@ -18,11 +19,11 @@ export class TelegramNewsletterService {
     @InjectModel(TgChannel) private tgChannelModel: typeof TgChannel,
     private readonly configService: ConfigService,
   ) {
-    this.BOT_TOKEN = this.configService.get('NEWSLETTER_BOT_TOKEN');
+    this.BOT_TOKEN = this.configService.get('NEWS_BOT_TOKEN');
     this.BOT = new Telegraf(this.BOT_TOKEN);
   }
 
-  public async sendApplication(dto: SendApplicationDto) {
+  async sendApplication(dto: SendApplicationDto) {
     const { email, phone, url, token } = dto;
 
     if (!email && !phone)
@@ -52,20 +53,22 @@ export class TelegramNewsletterService {
     };
   }
 
-  // create channel
-  public async addChannel(dto: AddChannelDto) {
-    await this.tgChannelModel.create({
+  async addChannel(dto: AddChannelDto) {
+    const channel = await this.tgChannelModel.create({
+      name: dto.name,
+      url: dto.url,
       channel_id: dto.channelId,
+      city_id: dto.city_id,
     });
 
     return {
       statusCode: HttpStatus.CREATED,
       message: 'Channel added successfully',
+      data: channel,
     };
   }
 
-  // delete channel
-  public async deleteChannel(dto: DeleteChannelDto) {
+  async deleteChannel(dto: DeleteChannelDto) {
     const id = parseInt(dto.id);
     const channel = await this.tgChannelModel.findByPk(id);
     if (!channel) {
@@ -78,9 +81,18 @@ export class TelegramNewsletterService {
     };
   }
 
-  public async getChannels() {
+  async getChannels({ city_id }: { city_id?: number } = {}) {
+    const where = city_id ? { city_id } : {};
     const channels = await this.tgChannelModel.findAll({
-      attributes: ['id', [col('channel_id'), 'channelId']],
+      where,
+      attributes: [
+        'id',
+        'name',
+        'url',
+        [col('channel_id'), 'channelId'],
+        'city_id',
+      ],
+      include: [{ model: City }],
     });
 
     return {
@@ -92,13 +104,11 @@ export class TelegramNewsletterService {
     };
   }
 
-  // send newsletter
-  public async sendNewsletter(text: string) {
+  async sendNewsletter(text: string) {
     const channels = await this.tgChannelModel.findAll({
       attributes: ['channel_id'],
     });
 
-    // send newsletter to all channels
     for (const channel of channels) {
       try {
         await this.BOT.telegram.sendMessage(`-${channel.channel_id}`, text, {
