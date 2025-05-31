@@ -19,9 +19,12 @@ async function bootstrap() {
   // Enable CORS
   app.enableCors({
     origin: CLIENT_URLS.split(';'),
+    // origin: '*',
     credentials: true,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
   });
+  console.log('CLIENT_URLS:', CLIENT_URLS);
+
   // Set `http request size
   app.use(bodyParser.json({ limit: '50mb' }));
   app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
