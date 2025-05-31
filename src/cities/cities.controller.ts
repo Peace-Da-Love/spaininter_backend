@@ -14,6 +14,7 @@ import {
   HttpException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { Auth } from '../auth/decorators/auth.decorator';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
 import { CitiesService } from './cities.service';
@@ -36,6 +37,7 @@ export class CitiesController {
     };
   }
 
+  // @Auth()
   @Post()
   @UseInterceptors(
     FileInterceptor('photo', {
@@ -65,6 +67,7 @@ export class CitiesController {
     return this.citiesService.create({ name, photo_url: photoUrl });
   }
 
+  // @Auth()
   @Patch(':id')
   @UseInterceptors(
     FileInterceptor('photo', {
@@ -119,12 +122,14 @@ export class CitiesController {
     return cities;
   }
 
+  // @Auth()
   @Post('links')
   @HttpCode(HttpStatus.OK)
   async addLink(@Body() dto: AddCityLinkDto) {
     return await this.citiesService.addLink(dto);
   }
 
+  // @Auth()
   @Delete(':cityId/links')
   @HttpCode(HttpStatus.OK)
   async deleteLink(
@@ -132,5 +137,11 @@ export class CitiesController {
     @Query('linkId') linkId: string,
   ) {
     return await this.citiesService.deleteLink({ cityId, linkId });
+  }
+
+  // @Auth()
+  @Delete(':id/photo')
+  async deletePhoto(@Param('id') id: string) {
+    return this.citiesService.removePhoto(+id);
   }
 }
