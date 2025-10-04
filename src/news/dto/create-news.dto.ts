@@ -11,10 +11,6 @@ import {
 import { Type } from 'class-transformer';
 
 export class CreateNewsDto {
-  @IsString()
-  @Length(5, 300)
-  declare telegramShortText: string;
-
   @IsNumber()
   category_id: number;
 

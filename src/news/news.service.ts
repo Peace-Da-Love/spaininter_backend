@@ -387,14 +387,12 @@ export class NewsService {
       await this.newsTranslationsModel.bulkCreate(translations);
 
       const enLangId = await this.languageService.findLanguageByName('en');
-      const enTitle = escapeSpecialCharacters(
-        translations.find((t) => t.language_id === enLangId).title,
-      );
-      const enLink = translations.find((t) => t.language_id === enLangId).link;
+      const enTranslation = translations.find((t) => t.language_id === enLangId);
+      const enTitle = escapeSpecialCharacters(enTranslation.title);
+      const enLink = enTranslation.link;
+      const enDescription = escapeSpecialCharacters(enTranslation.description);
       const utmLink = `https://spaininter.com/en/news/${enLink}?utm_source=telegram&utm_medium=article`;
-      const tgMessage = `[${enTitle}](${utmLink})\n\n${escapeSpecialCharacters(
-        dto.telegramShortText,
-      )}`;
+      const tgMessage = `[${enTitle}](${utmLink})\n\n${enDescription}`;
       await this.telegramNewsletterService.sendNewsletter(tgMessage);
       await t.commit();
     } catch (err) {
