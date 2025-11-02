@@ -4,12 +4,16 @@ import {
   Delete,
   Get,
   HttpCode,
+  HttpException,
   HttpStatus,
   Param,
+  Patch,
   Post,
-  Put,
   Query,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { NewsService } from './news.service';
 import { CreateNewsDto } from './dto/create-news.dto';
 import { Auth } from '../auth/decorators/auth.decorator';
@@ -17,9 +21,10 @@ import { GetNewsForAdminDto } from './dto/get-news-for-admin.dto';
 import { DeleteNewsDto } from './dto/delete-news.dto';
 import { GetNewsByIdDto } from './dto/get-news-by-id.dto';
 import { UpdateNewsDto } from './dto/update-news.dto';
-import { Headers } from '@nestjs/common';
+import { UpdateNewsTranslationDto } from './dto/update-news-translations.dto';
 import { GetLatestNewsDto } from './dto/get-latest-news.dto';
 import { GetCategoryNewsDto } from './dto/get-category-news.dto';
+import { Headers } from '@nestjs/common';
 
 @Controller('news')
 export class NewsController {
@@ -86,10 +91,76 @@ export class NewsController {
     return this.newsService.deleteNews(dto);
   }
 
+
   @Auth()
-  @Put('update')
+  @Post(':id/photo')
+  @UseInterceptors(
+    FileInterceptor('photo', {
+      // Используем GoogleStorageService для обработки файла
+    }),
+  )
   @HttpCode(HttpStatus.OK)
-  public async updateNews(@Body() dto: UpdateNewsDto) {
-    return this.newsService.updateNews(dto);
+  public async updateNewsPhoto(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    console.log('🔍 Updating photo for newsId:', id);
+    console.log('🔍 Uploaded file:', file ? { filename: file.filename, size: file.size } : 'No file');
+    
+    if (!file) {
+      throw new HttpException('No photo file provided', HttpStatus.BAD_REQUEST);
+    }
+    
+    try {
+      const uploadResult = await this.newsService.uploadPosterFile(file);
+      const posterLink = uploadResult.url;
+      console.log('🔍 File uploaded, new posterLink:', posterLink);
+      
+      const updateDto: UpdateNewsDto = {
+        newsId: +id,
+        posterLink: posterLink,
+      };
+      
+      return this.newsService.updateNews(updateDto);
+    } catch (error) {
+      console.error('🔍 Error uploading file:', error);
+      throw new HttpException('Failed to upload photo', HttpStatus.BAD_REQUEST);
+    }
+  }
+
+  @Auth()
+  @Patch(':id/translations')
+  @HttpCode(HttpStatus.OK)
+  public async updateNewsTranslations(
+    @Param('id') id: string,
+    @Body() body: any,
+  ) {
+    console.log('🔍 Updating translations for newsId:', id);
+    console.log('🔍 Raw request body:', body);
+    console.log('🔍 Body type:', typeof body);
+    console.log('🔍 Body is array:', Array.isArray(body));
+    
+    // Фронтенд отправляет массив напрямую
+    let translations: UpdateNewsTranslationDto[];
+    if (Array.isArray(body)) {
+      translations = body;
+    } else {
+      throw new HttpException('Request body must be an array of translations', HttpStatus.BAD_REQUEST);
+    }
+    
+    // Ручная валидация
+    if (translations.length === 0) {
+      throw new HttpException('Translations array cannot be empty', HttpStatus.BAD_REQUEST);
+    }
+    
+    for (const translation of translations) {
+      if (!translation.languageId || typeof translation.languageId !== 'number') {
+        throw new HttpException('Each translation must have a valid languageId', HttpStatus.BAD_REQUEST);
+      }
+    }
+    
+    console.log('🔍 Validated translations:', translations);
+    
+    return this.newsService.updateNewsTranslations(+id, translations);
   }
 }

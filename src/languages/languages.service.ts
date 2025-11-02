@@ -50,13 +50,12 @@ export class LanguagesService {
     const languages = await this.getAllLanguages();
     const languageIdsFromDb = languages.map((l) => l.language_id);
 
-    if (languageIds.length !== languageIdsFromDb.length) return false;
-
-    languageIds.sort();
-    languageIdsFromDb.sort();
-
-    for (let i = 0; i < languageIds.length; i++) {
-      if (languageIds[i] !== languageIdsFromDb[i]) return false;
+    // Проверяем, что все запрошенные языки существуют в БД
+    for (const requestedId of languageIds) {
+      if (!languageIdsFromDb.includes(requestedId)) {
+        console.log(`🔍 Language ID ${requestedId} not found in database. Available IDs:`, languageIdsFromDb);
+        return false;
+      }
     }
 
     return true;

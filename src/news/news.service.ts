@@ -14,12 +14,14 @@ import { Category } from '../categories/categories.model';
 import { col, literal } from 'sequelize';
 import { Sequelize } from 'sequelize-typescript';
 import { UpdateNewsDto } from './dto/update-news.dto';
+import { UpdateNewsTranslationDto } from './dto/update-news-translations.dto';
 import { TelegramNewsletterService } from '../telegram-newsletter/telegram-newsletter.service';
 import { escapeSpecialCharacters } from '../common/utils';
 import { Language } from '../languages/languages.model';
 import { GetNewsByIdDto } from './dto/get-news-by-id.dto';
 import { GetLatestNewsDto } from './dto/get-latest-news.dto';
 import { GetCategoryNewsDto } from './dto/get-category-news.dto';
+import { GoogleStorageService } from '../google-storage/google-storage.service';
 
 @Injectable()
 export class NewsService {
@@ -31,6 +33,7 @@ export class NewsService {
     private readonly languageService: LanguagesService,
     private readonly categoryService: CategoriesService,
     private readonly telegramNewsletterService: TelegramNewsletterService,
+    private readonly googleStorageService: GoogleStorageService,
     private sequelize: Sequelize,
   ) {}
 
@@ -441,6 +444,16 @@ export class NewsService {
       where: { ...dto },
     });
     if (!news) throw new HttpException('News not found', HttpStatus.NOT_FOUND);
+    
+    // Удаляем постер из Google Cloud Storage перед удалением записи
+    if (news.poster_link) {
+      console.log('🗑️ Удаление постера при удалении новости:', {
+        newsId: dto.news_id,
+        posterLink: news.poster_link
+      });
+      await this.googleStorageService.deleteFile(news.poster_link);
+    }
+    
     await news.destroy();
     await this.newsTranslationsModel.destroy({
       where: { news_id: dto.news_id },
@@ -451,6 +464,10 @@ export class NewsService {
     };
   }
 
+  public async uploadPosterFile(file: Express.Multer.File) {
+    return this.googleStorageService.uploadFile(file);
+  }
+
   public async updateNews(dto: UpdateNewsDto) {
     const isNewsExists = await this.newsModel.findOne({
       where: { news_id: dto.newsId },
@@ -459,37 +476,101 @@ export class NewsService {
     if (!isNewsExists)
       throw new HttpException('News not found', HttpStatus.NOT_FOUND);
 
-    const isNewsTranslationExists = await this.newsTranslationsModel.findOne({
-      where: { news_id: dto.newsId, language_id: dto.languageId },
-    });
+    // Проверяем перевод только если languageId передан
+    if (dto.languageId) {
+      const isNewsTranslationExists = await this.newsTranslationsModel.findOne({
+        where: { news_id: dto.newsId, language_id: dto.languageId },
+      });
 
-    if (!isNewsTranslationExists)
-      throw new HttpException(
-        'News translation not found',
-        HttpStatus.NOT_FOUND,
-      );
+      if (!isNewsTranslationExists)
+        throw new HttpException(
+          'News translation not found',
+          HttpStatus.NOT_FOUND,
+        );
+    }
 
     const t = await this.sequelize.transaction();
 
     try {
-      await this.newsModel.update(
-        {
-          ad_link: dto.adLink,
-        },
-        { where: { news_id: dto.newsId }, transaction: t },
-      );
+      // Подготавливаем данные для обновления новости
+      const newsUpdateData: any = {};
+      console.log('🔍 UpdateNews Debug:', {
+        newsId: dto.newsId,
+        posterLink: dto.posterLink,
+        currentPosterLink: isNewsExists.poster_link,
+        adLink: dto.adLink
+      });
+      
+      if (dto.adLink !== undefined) {
+        newsUpdateData.ad_link = dto.adLink;
+      }
+      // Обрабатываем постер
+      if (dto.posterLink) {
+        // Удаляем старый постер, если он существует и отличается от нового
+        const oldPosterLink = isNewsExists.poster_link;
+        const newPosterLink = dto.posterLink;
+        
+        if (
+          newPosterLink &&
+          oldPosterLink &&
+          oldPosterLink !== newPosterLink
+        ) {
+          console.log('🗑️ Удаление старого постера:', {
+            oldPosterLink,
+            newPosterLink,
+            newsId: dto.newsId
+          });
+          
+          // Удаляем старый постер ДО обновления записи в БД
+          await this.googleStorageService.deleteFile(oldPosterLink);
+        }
+        
+        newsUpdateData.poster_link = newPosterLink;
+      }
+      
+      console.log('📝 NewsUpdateData:', newsUpdateData);
 
-      await this.newsTranslationsModel.update(
-        {
-          title: dto.title,
-          description: dto.description,
-          content: dto.content,
-        },
-        {
-          where: { news_id: dto.newsId, language_id: dto.languageId },
-          transaction: t,
-        },
-      );
+      // Обновляем основную таблицу новостей, если есть данные для обновления
+      if (Object.keys(newsUpdateData).length > 0) {
+        await this.newsModel.update(
+          newsUpdateData,
+          { where: { news_id: dto.newsId }, transaction: t },
+        );
+      }
+
+      // Подготавливаем данные для обновления переводов
+      const translationUpdateData: any = {};
+      if (dto.title !== undefined) {
+        translationUpdateData.title = dto.title;
+      }
+      if (dto.description !== undefined) {
+        translationUpdateData.description = dto.description;
+      }
+      if (dto.content !== undefined) {
+        translationUpdateData.content = dto.content;
+      }
+
+      console.log('🔍 Translation update data:', translationUpdateData);
+      console.log('🔍 LanguageId:', dto.languageId);
+      console.log('🔍 Has translation data:', Object.keys(translationUpdateData).length > 0);
+
+      // Обновляем переводы, если есть данные для обновления
+      if (Object.keys(translationUpdateData).length > 0) {
+        // Требуем languageId для обновления переводов
+        if (!dto.languageId) {
+          throw new HttpException('languageId is required to update translations', HttpStatus.BAD_REQUEST);
+        }
+
+        // Обновляем конкретный перевод
+        await this.newsTranslationsModel.update(
+          translationUpdateData,
+          {
+            where: { news_id: dto.newsId, language_id: dto.languageId },
+            transaction: t,
+          },
+        );
+        console.log('🔍 Updated translation for languageId:', dto.languageId);
+      }
 
       await t.commit();
     } catch (err) {
@@ -501,6 +582,74 @@ export class NewsService {
     return {
       statusCode: HttpStatus.OK,
       message: 'News updated successfully',
+    };
+  }
+
+  public async updateNewsTranslations(newsId: number, translations: UpdateNewsTranslationDto[]) {
+    console.log('🔍 Service: updateNewsTranslations called with:', { newsId, translations });
+    
+    if (!translations || !Array.isArray(translations) || translations.length === 0) {
+      throw new HttpException('Translations array is required and must not be empty', HttpStatus.BAD_REQUEST);
+    }
+
+    const isNewsExists = await this.newsModel.findOne({
+      where: { news_id: newsId },
+    });
+
+    if (!isNewsExists) {
+      throw new HttpException('News not found', HttpStatus.NOT_FOUND);
+    }
+
+    // Проверяем существование языков
+    const languageIds = translations.map(t => t.languageId);
+    console.log('🔍 Service: languageIds to check:', languageIds);
+    
+    const isLanguageExists = await this.languageService.checkLanguageExists(languageIds);
+    
+    if (!isLanguageExists) {
+      throw new HttpException('One or more languages do not exist', HttpStatus.BAD_REQUEST);
+    }
+
+    const t = await this.sequelize.transaction();
+
+    try {
+      // Обновляем каждый перевод
+      for (const translation of translations) {
+        const translationUpdateData: any = {};
+        
+        if (translation.title !== undefined) {
+          translationUpdateData.title = translation.title;
+        }
+        if (translation.description !== undefined) {
+          translationUpdateData.description = translation.description;
+        }
+        if (translation.content !== undefined) {
+          translationUpdateData.content = translation.content;
+        }
+
+        // Обновляем перевод, если есть данные для обновления
+        if (Object.keys(translationUpdateData).length > 0) {
+          await this.newsTranslationsModel.update(
+            translationUpdateData,
+            {
+              where: { news_id: newsId, language_id: translation.languageId },
+              transaction: t,
+            },
+          );
+          console.log(`🔍 Updated translation for languageId: ${translation.languageId}`);
+        }
+      }
+
+      await t.commit();
+    } catch (err) {
+      console.error(err);
+      await t.rollback();
+      throw new HttpException('Failed to update news translations', HttpStatus.BAD_REQUEST);
+    }
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'News translations updated successfully',
     };
   }
 

@@ -7,5 +7,6 @@ import { GoogleStorageController } from './google-storage.controller';
   imports: [ConfigModule],
   providers: [GoogleStorageService],
   controllers: [GoogleStorageController],
+  exports: [GoogleStorageService],
 })
 export class GoogleStorageModule {}

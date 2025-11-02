@@ -7,6 +7,7 @@ import { NewsController } from './news.controller';
 import { LanguagesModule } from '../languages/languages.module';
 import { CategoriesModule } from '../categories/categories.module';
 import { TelegramNewsletterModule } from '../telegram-newsletter/telegram-newsletter.module';
+import { GoogleStorageModule } from '../google-storage/google-storage.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { TelegramNewsletterModule } from '../telegram-newsletter/telegram-newsle
     LanguagesModule,
     CategoriesModule,
     TelegramNewsletterModule,
+    GoogleStorageModule,
   ],
   providers: [NewsService],
   controllers: [NewsController],
