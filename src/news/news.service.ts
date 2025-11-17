@@ -49,10 +49,10 @@ export class NewsService {
         [col('newsTranslations.content'), 'content'],
         [col('newsTranslations.link'), 'link'],
         [col('category.category_id'), 'categoryId'],
-        [col('category.categoryTranslations.category_name'), 'categoryName'],
+        [col('category.category_name'), 'categoryName'],
         [
           literal(
-            `REGEXP_REPLACE((SELECT category_name FROM category_translations WHERE category_translations.category_id = category.category_id AND category_translations.language_id = (SELECT language_id FROM languages WHERE language_code = 'en')), '[^a-zA-Z0-9]', '-', 'g')`,
+            `COALESCE(category.category_name, '')`,
           ),
           'categoryLink',
         ],
@@ -77,20 +77,6 @@ export class NewsService {
         {
           attributes: [],
           model: Category,
-          include: [
-            {
-              attributes: [],
-              as: 'categoryTranslations',
-              model: CategoryTranslations,
-              include: [
-                {
-                  model: Language,
-                  attributes: [],
-                  where: { language_code: languageCode ?? 'en' },
-                },
-              ],
-            },
-          ],
         },
       ],
     });
@@ -124,10 +110,10 @@ export class NewsService {
         [col('newsTranslations.content'), 'content'],
         [col('newsTranslations.link'), 'link'],
         [col('category.category_id'), 'categoryId'],
-        [col('category.categoryTranslations.category_name'), 'categoryName'],
+        [col('category.category_name'), 'categoryName'],
         [
           literal(
-            `REGEXP_REPLACE((SELECT category_name FROM category_translations WHERE category_translations.category_id = category.category_id AND category_translations.language_id = (SELECT language_id FROM languages WHERE language_code = 'en')), '[^a-zA-Z0-9]', '-', 'g')`,
+            `COALESCE(category.category_name, '')`,
           ),
           'categoryLink',
         ],
@@ -152,20 +138,6 @@ export class NewsService {
         {
           attributes: [],
           model: Category,
-          include: [
-            {
-              attributes: [],
-              as: 'categoryTranslations',
-              model: CategoryTranslations,
-              include: [
-                {
-                  model: Language,
-                  attributes: [],
-                  where: { language_code: languageCode ?? 'en' },
-                },
-              ],
-            },
-          ],
         },
       ],
     });
@@ -194,10 +166,10 @@ export class NewsService {
         'city',
         [col('newsTranslations.title'), 'title'],
         [col('newsTranslations.link'), 'link'],
-        [col('category.categoryTranslations.category_name'), 'categoryName'],
+        [col('category.category_name'), 'categoryName'],
         [
           literal(
-            `REGEXP_REPLACE((SELECT category_name FROM category_translations WHERE category_translations.category_id = category.category_id AND category_translations.language_id = (SELECT language_id FROM languages WHERE language_code = 'en')), '[^a-zA-Z0-9]', '-', 'g')`,
+            `COALESCE(category.category_name, '')`,
           ),
           'categoryLink',
         ],
@@ -221,20 +193,6 @@ export class NewsService {
           attributes: [],
           as: 'category',
           model: Category,
-          include: [
-            {
-              as: 'categoryTranslations',
-              model: CategoryTranslations,
-              attributes: [],
-              include: [
-                {
-                  model: Language,
-                  attributes: [],
-                  where: { language_code: languageCode ?? 'en' },
-                },
-              ],
-            },
-          ],
         },
       ],
       subQuery: false,
@@ -264,7 +222,8 @@ export class NewsService {
     const limit = Number(dto.limit) || 10;
     const offset = (page - 1) * limit;
 
-    const categoryName = dto.category.toLowerCase().replace(/-/g, '/');
+    // Ищем категорию по имени (поддерживаем старый формат с дефисами для обратной совместимости)
+    const categoryName = dto.category.toLowerCase().replace(/-/g, '_');
     const category =
       await this.categoryService.findCategoryByName(categoryName);
 
@@ -277,10 +236,10 @@ export class NewsService {
         'city',
         [col('newsTranslations.title'), 'title'],
         [col('newsTranslations.link'), 'link'],
-        [col('category.categoryTranslations.category_name'), 'categoryName'],
+        [col('category.category_name'), 'categoryName'],
         [
           literal(
-            `REGEXP_REPLACE((SELECT category_name FROM category_translations WHERE category_translations.category_id = category.category_id AND category_translations.language_id = (SELECT language_id FROM languages WHERE language_code = 'en')), '[^a-zA-Z0-9]', '-', 'g')`,
+            `COALESCE(category.category_name, '')`,
           ),
           'categoryLink',
         ],
@@ -304,20 +263,6 @@ export class NewsService {
           attributes: [],
           as: 'category',
           model: Category,
-          include: [
-            {
-              as: 'categoryTranslations',
-              model: CategoryTranslations,
-              attributes: [],
-              include: [
-                {
-                  model: Language,
-                  attributes: [],
-                  where: { language_code: languageCode ?? 'en' },
-                },
-              ],
-            },
-          ],
         },
       ],
       subQuery: false,
@@ -345,15 +290,32 @@ export class NewsService {
   }
 
   public async createNews(dto: CreateNewsDto) {
-    const isCategoryIdExists = this.categoryService.checkCategoryIdExists(
-      dto.category_id,
-    );
+    let categoryId: number;
 
-    if (!isCategoryIdExists)
+    // Если передан category_name, найти или создать категорию
+    if (dto.category_name) {
+      categoryId = await this.categoryService.findOrCreateCategory(
+        dto.category_name,
+      );
+    } else if (dto.category_id) {
+      // Если передан category_id, проверить его существование
+      const isCategoryIdExists = await this.categoryService.checkCategoryIdExists(
+        dto.category_id,
+      );
+
+      if (!isCategoryIdExists)
+        throw new HttpException(
+          'Category does not exist',
+          HttpStatus.BAD_REQUEST,
+        );
+
+      categoryId = dto.category_id;
+    } else {
       throw new HttpException(
-        'Category does not exist',
+        'Either category_id or category_name must be provided',
         HttpStatus.BAD_REQUEST,
       );
+    }
 
     const languageIds = dto.translations.map((t) => t.language_id);
     const isLanguageExists =
@@ -369,7 +331,7 @@ export class NewsService {
 
     try {
       const news = await this.newsModel.create({
-        category_id: dto.category_id,
+        category_id: categoryId,
         admin_id: this.request['user'].admin_id,
         poster_link: dto.poster_link,
         province: dto.province,
@@ -393,9 +355,8 @@ export class NewsService {
       const enTranslation = translations.find((t) => t.language_id === enLangId);
       const enTitle = escapeSpecialCharacters(enTranslation.title);
       const enLink = enTranslation.link;
-      const enDescription = escapeSpecialCharacters(enTranslation.description);
       const utmLink = `https://spaininter.com/en/news/${enLink}?utm_source=telegram&utm_medium=article`;
-      const tgMessage = `[${enTitle}](${utmLink})\n\n${enDescription}`;
+      const tgMessage = `[${enTitle}](${utmLink})`;
       await this.telegramNewsletterService.sendNewsletter(tgMessage);
       await t.commit();
     } catch (err) {

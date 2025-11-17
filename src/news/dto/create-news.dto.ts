@@ -7,12 +7,25 @@ import {
   IsOptional,
   ArrayMinSize,
   Length,
+  ValidateIf,
+  Matches,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateNewsDto {
+  @ValidateIf((o) => !o.category_name)
+  @IsNotEmpty({ message: 'Either category_id or category_name must be provided' })
   @IsNumber()
-  category_id: number;
+  category_id?: number;
+
+  @ValidateIf((o) => !o.category_id)
+  @IsNotEmpty({ message: 'Either category_id or category_name must be provided' })
+  @IsString()
+  @Length(2, 50)
+  @Matches(/^[a-z0-9_]+$/, {
+    message: 'category_name must contain only lowercase letters, numbers, and underscores',
+  })
+  category_name?: string;
 
   @IsString()
   @Length(1, 100)
@@ -27,9 +40,10 @@ export class CreateNewsDto {
   city: string;
 
   @IsOptional()
+  @ValidateIf((o) => o.ad_link !== null)
   @IsString()
   @Length(1, 100)
-  ad_link: string;
+  ad_link: string | null;
 
   @IsArray()
   @ArrayMinSize(1)

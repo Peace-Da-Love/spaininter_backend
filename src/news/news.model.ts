@@ -19,7 +19,7 @@ interface NewsCreationAttrs {
   province: string;
   city: string;
   admin_id: number;
-  ad_link: string;
+  ad_link?: string | null;
 }
 
 @Table({ tableName: 'news' })

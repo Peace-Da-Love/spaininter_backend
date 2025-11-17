@@ -7,6 +7,7 @@ import { LanguagesService } from '../languages/languages.service';
 import { DeleteCategoryDto } from './dto/delete-category.dto';
 import { GetCategoryById } from './dto/get-category-by-id';
 import { Sequelize } from 'sequelize-typescript';
+import { Op } from 'sequelize';
 import { News } from '../news/news.model';
 import { GetCategoriesByLangCodeDto } from './dto/get-categories-by-lang-code.dto';
 import { GetCategoryByNameDto } from './dto/get-category-by-name.dto';
@@ -25,6 +26,33 @@ export class CategoriesService {
   ) {}
 
   public async createCategory(dto: CreateCategoryDto) {
+    // If client provided a single universal category name, create/find it in `categories`
+    if (dto.category_name) {
+      const name = dto.category_name.toLowerCase().trim();
+
+      if (!/^[a-z0-9_]+$/.test(name)) {
+        throw new HttpException(
+          'Category name must contain only lowercase letters, numbers, and underscores',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      await this.findOrCreateCategory(name);
+
+      return {
+        statusCode: HttpStatus.CREATED,
+        message: 'Category created successfully',
+      };
+    }
+
+    // Otherwise expect translations array (backward-compatible flow)
+    if (!dto.translations || dto.translations.length === 0) {
+      throw new HttpException(
+        'Either translations or category_name must be provided',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
     const languageIds = dto.translations.map((t) => t.language_id);
     const isLanguageExists =
       await this.languagesService.checkLanguageExists(languageIds);
@@ -52,32 +80,19 @@ export class CategoriesService {
   }
 
   public async getCategoryTranslations(dto: GetCategoriesByLangCodeDto) {
-    const langCode = dto.langCode;
-    const languageId = await this.languagesService.findLanguageByName(langCode);
-    const enLangId = await this.languagesService.findLanguageByName('en');
-
-    if (!languageId)
-      throw new HttpException('Language not found', HttpStatus.NOT_FOUND);
-
+    // Для обратной совместимости возвращаем категории из новой таблицы
     const categories = await this.categoryModel.findAll({
       attributes: [
         'category_id',
-        [Sequelize.col('categoryTranslations.category_name'), 'category_name'],
+        'category_name',
         [
-          Sequelize.literal(
-            `(SELECT REPLACE(REPLACE(categoryTranslations.category_name, '/', '-'), '\\', '-') FROM category_translations AS categoryTranslations WHERE categoryTranslations.category_id = "Category"."category_id" AND categoryTranslations.language_id = ${enLangId})`,
-          ),
+          Sequelize.literal('category_name'),
           'category_key',
         ],
       ],
-      include: [
-        {
-          attributes: [],
-          model: CategoryTranslations,
-          as: 'categoryTranslations',
-          where: { language_id: languageId },
-        },
-      ],
+      where: {
+        category_name: { [Op.ne]: null },
+      },
     });
 
     if (!categories)
@@ -91,21 +106,11 @@ export class CategoriesService {
   }
 
   public async getCategories() {
-    const enLangId = await this.languagesService.findLanguageByName('en');
-
     const categories = await this.categoryModel.findAll({
-      attributes: [
-        'category_id',
-        'createdAt',
-        [Sequelize.col('categoryTranslations.category_name'), 'category_name'],
-      ],
-      include: [
-        {
-          model: CategoryTranslations,
-          attributes: [],
-          where: { language_id: enLangId },
-        },
-      ],
+      attributes: ['category_id', 'category_name', 'createdAt'],
+      where: {
+        category_name: { [Op.ne]: null },
+      },
     });
 
     return {
@@ -223,30 +228,18 @@ export class CategoriesService {
     if (!isCategoryExists)
       throw new HttpException('Category not found', HttpStatus.NOT_FOUND);
 
-    const isCategoryTranslationExists =
-      await this.categoryTranslationsModel.findOne({
-        where: {
-          category_id: dto.categoryId,
-          language_id: dto.languageId,
-        },
-      });
+    const categoryName = typeof dto.categoryName === 'string' ? dto.categoryName.trim() : '';
 
-    if (!isCategoryTranslationExists)
+    if (categoryName.length < 2)
       throw new HttpException(
-        'Category translation not found',
-        HttpStatus.NOT_FOUND,
+        'Category name must be a string with at least 2 characters',
+        HttpStatus.BAD_REQUEST,
       );
 
-    await this.categoryTranslationsModel.update(
-      {
-        category_name: dto.categoryName.toLowerCase(),
-      },
-      {
-        where: {
-          category_id: dto.categoryId,
-          language_id: dto.languageId,
-        },
-      },
+    // Categories are now language-agnostic tags
+    await this.categoryModel.update(
+      { category_name: categoryName.toLowerCase() },
+      { where: { category_id: dto.categoryId } },
     );
 
     return {
@@ -256,30 +249,78 @@ export class CategoriesService {
   }
 
   public async findCategoryByName(categoryName: string): Promise<number> {
-    const category = await this.categoryTranslationsModel.findOne({
-      where: { category_name: categoryName.toLowerCase() },
+    const normalizedName = categoryName.toLowerCase();
+    
+    // Сначала ищем в новой таблице categories
+    let category = await this.categoryModel.findOne({
+      where: { category_name: normalizedName },
     });
 
-    if (!category)
-      throw new HttpException('Category not found', HttpStatus.NOT_FOUND);
+    // Если не найдено, ищем в старой таблице переводов (для обратной совместимости)
+    if (!category) {
+      const categoryTranslation = await this.categoryTranslationsModel.findOne({
+        where: { category_name: normalizedName },
+      });
+
+      if (!categoryTranslation)
+        throw new HttpException('Category not found', HttpStatus.NOT_FOUND);
+
+      return categoryTranslation.category_id;
+    }
 
     return category.category_id;
   }
 
   public async findCategoryById(categoryId: number): Promise<string> {
+    // Сначала ищем в новой таблице categories
+    const category = await this.categoryModel.findByPk(categoryId);
+
+    if (category && category.category_name) {
+      return category.category_name;
+    }
+
+    // Если не найдено, ищем в старой таблице переводов (для обратной совместимости)
     const enLangId = await this.languagesService.findLanguageByName('en');
-    const category = await this.categoryTranslationsModel.findOne({
+    const categoryTranslation = await this.categoryTranslationsModel.findOne({
       where: { category_id: categoryId, language_id: enLangId },
     });
 
-    if (!category)
+    if (!categoryTranslation)
       throw new HttpException('Category not found', HttpStatus.NOT_FOUND);
 
-    return category.category_name;
+    return categoryTranslation.category_name;
   }
 
   public async checkCategoryIdExists(categoryId: number): Promise<boolean> {
     const category = await this.categoryModel.findByPk(categoryId);
     return !!category;
+  }
+
+  public async findOrCreateCategory(categoryName: string): Promise<number> {
+    const normalizedName = categoryName.toLowerCase().trim();
+    
+    // Проверяем валидацию: только латиница, цифры, подчеркивания
+    if (!/^[a-z0-9_]+$/.test(normalizedName)) {
+      throw new HttpException(
+        'Category name must contain only lowercase letters, numbers, and underscores',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    // Ищем существующую категорию
+    let category = await this.categoryModel.findOne({
+      where: { category_name: normalizedName },
+    });
+
+    if (category) {
+      return category.category_id;
+    }
+
+    // Создаем новую категорию
+    category = await this.categoryModel.create({
+      category_name: normalizedName,
+    });
+
+    return category.category_id;
   }
 }
