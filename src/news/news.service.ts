@@ -16,12 +16,13 @@ import { Sequelize } from 'sequelize-typescript';
 import { UpdateNewsDto } from './dto/update-news.dto';
 import { UpdateNewsTranslationDto } from './dto/update-news-translations.dto';
 import { TelegramNewsletterService } from '../telegram-newsletter/telegram-newsletter.service';
-import { escapeSpecialCharacters } from '../common/utils';
+import { escapeSpecialCharacters, removeInvalidCharacters } from '../common/utils';
 import { Language } from '../languages/languages.model';
 import { GetNewsByIdDto } from './dto/get-news-by-id.dto';
 import { GetLatestNewsDto } from './dto/get-latest-news.dto';
 import { GetCategoryNewsDto } from './dto/get-category-news.dto';
 import { GoogleStorageService } from '../google-storage/google-storage.service';
+import { transliterate as tr } from 'transliteration';
 
 @Injectable()
 export class NewsService {
@@ -342,8 +343,11 @@ export class NewsService {
       const translations = dto.translations.map((translation) => {
         return {
           ...translation,
-          link:
-            translation.link || linkFormatter(translation.title, news.news_id),
+          link: this.normalizeTranslationLink(
+            translation.link,
+            translation.title,
+            news.news_id,
+          ),
           news_id: news.news_id,
           content: this.escapeJsonString(translation.content),
         };
@@ -624,5 +628,32 @@ export class NewsService {
       .replace(/[\n]/g, '\\n')
       .replace(/[\r]/g, '\\r')
       .replace(/[\t]/g, '\\t');
+  }
+
+  private normalizeTranslationLink(
+    input: string | undefined,
+    title: string,
+    newsId: number,
+  ) {
+    const raw = input?.trim();
+    if (!raw) {
+      return linkFormatter(title, newsId);
+    }
+
+    let working = raw;
+    const idPrefix = String(newsId);
+    if (working.startsWith(idPrefix)) {
+      working = working.slice(idPrefix.length);
+      working = working.replace(/^[\s\-_]+/, '');
+    }
+
+    const cleaned = removeInvalidCharacters(working).replace(/ /g, '-');
+    const slug = tr(cleaned);
+
+    if (!slug) {
+      return linkFormatter(title, newsId);
+    }
+
+    return `${newsId}-${slug}`;
   }
 }

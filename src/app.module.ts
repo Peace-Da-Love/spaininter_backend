@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { SequelizeModule } from '@nestjs/sequelize';
 import { postgresConfig } from './common/configs';
 import { AuthModule } from './auth/auth.module';
+import { UserAuthModule } from './user-auth/user-auth.module';
 import { TokenModule } from './token/token.module';
 import { BotModule } from './bot/bot.module';
 import { GoogleStorageModule } from './google-storage/google-storage.module';
@@ -32,6 +33,7 @@ import { CitiesModule } from './cities/cities.module';
       dest: './uploads',
     }),
     AuthModule,
+    UserAuthModule,
     TokenModule,
     BotModule,
     GoogleStorageModule,
