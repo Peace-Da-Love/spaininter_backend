@@ -10,6 +10,7 @@ import { News } from '../../news/news.model';
 import { Role } from '../../role/role.model';
 import { TgChannel } from '../../telegram-newsletter/telegram-newsletter.model';
 import { City } from 'src/cities/cities.entity';
+import { User } from '../../users/user.model';
 
 export const postgresConfig = async (
   configService: ConfigService,
@@ -30,6 +31,7 @@ export const postgresConfig = async (
     CategoryTranslations,
     NewsTranslations,
     News,
+    User,
     Role,
     TgChannel,
   ],

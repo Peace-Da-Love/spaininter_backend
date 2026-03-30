@@ -1,6 +1,6 @@
 import { HttpException, HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { CreateNewsDto } from './dto/create-news.dto';
-import { News } from './news.model';
+import { News, NewsStatus } from './news.model';
 import { InjectModel } from '@nestjs/sequelize';
 import { NewsTranslations } from './news-translations.model';
 import { REQUEST } from '@nestjs/core';
@@ -11,7 +11,7 @@ import { DeleteNewsDto } from './dto/delete-news.dto';
 import { CategoriesService } from '../categories/categories.service';
 import { CategoryTranslations } from '../categories/category-translations.model';
 import { Category } from '../categories/categories.model';
-import { col, literal } from 'sequelize';
+import { col, literal, Op } from 'sequelize';
 import { Sequelize } from 'sequelize-typescript';
 import { UpdateNewsDto } from './dto/update-news.dto';
 import { UpdateNewsTranslationDto } from './dto/update-news-translations.dto';
@@ -23,6 +23,7 @@ import { GetLatestNewsDto } from './dto/get-latest-news.dto';
 import { GetCategoryNewsDto } from './dto/get-category-news.dto';
 import { GoogleStorageService } from '../google-storage/google-storage.service';
 import { transliterate as tr } from 'transliteration';
+import { ReviewNewsDto } from './dto/review-news.dto';
 
 @Injectable()
 export class NewsService {
@@ -61,7 +62,7 @@ export class NewsService {
         'createdAt',
         'updatedAt',
       ],
-      where: { news_id: id },
+      where: { news_id: id, status: 'approved' },
       include: [
         {
           attributes: [],
@@ -104,8 +105,12 @@ export class NewsService {
       attributes: [
         ['news_id', 'newsId'],
         ['poster_link', 'posterLink'],
+        'province',
         'city',
         ['ad_link', 'adLink'],
+        'status',
+        'user_id',
+        'admin_id',
         [col('newsTranslations.title'), 'title'],
         [col('newsTranslations.description'), 'description'],
         [col('newsTranslations.content'), 'content'],
@@ -162,6 +167,7 @@ export class NewsService {
     const news = await this.newsModel.findAll({
       limit,
       offset,
+      where: { status: 'approved' },
       attributes: [
         ['news_id', 'newsId'],
         'city',
@@ -231,7 +237,7 @@ export class NewsService {
     const news = await this.newsModel.findAll({
       limit,
       offset,
-      where: { category_id: category },
+      where: { category_id: category, status: 'approved' },
       attributes: [
         ['news_id', 'newsId'],
         'city',
@@ -271,7 +277,7 @@ export class NewsService {
     });
 
     const newsCount = await this.newsModel.count({
-      where: { category_id: category },
+      where: { category_id: category, status: 'approved' },
     });
     const pageCount = Math.ceil(newsCount / limit);
     const hasNextPage = page < pageCount;
@@ -291,6 +297,15 @@ export class NewsService {
   }
 
   public async createNews(dto: CreateNewsDto) {
+    const actor = this.request['user'] as { admin_id?: number; user_id?: number } | undefined;
+    const adminId = actor?.admin_id ?? null;
+    const userId = actor?.user_id ?? null;
+    const status: NewsStatus = adminId ? 'approved' : 'pending';
+
+    if (!adminId && !userId) {
+      throw new HttpException('Unauthorized', HttpStatus.UNAUTHORIZED);
+    }
+
     let categoryId: number;
 
     // Если передан category_name, найти или создать категорию
@@ -333,10 +348,12 @@ export class NewsService {
     try {
       const news = await this.newsModel.create({
         category_id: categoryId,
-        admin_id: this.request['user'].admin_id,
+        admin_id: adminId,
+        user_id: userId,
+        status,
         poster_link: dto.poster_link,
-        province: dto.province,
-        city: dto.city,
+        province: dto.province ?? null,
+        city: dto.city ?? null,
         ad_link: dto.ad_link,
       });
 
@@ -355,13 +372,17 @@ export class NewsService {
 
       await this.newsTranslationsModel.bulkCreate(translations);
 
-      const enLangId = await this.languageService.findLanguageByName('en');
-      const enTranslation = translations.find((t) => t.language_id === enLangId);
-      const enTitle = escapeSpecialCharacters(enTranslation.title);
-      const enLink = enTranslation.link;
-      const utmLink = `https://spaininter.com/en/news/${enLink}?utm_source=telegram&utm_medium=article`;
-      const tgMessage = `[${enTitle}](${utmLink})`;
-      await this.telegramNewsletterService.sendNewsletter(tgMessage);
+      if (status === 'approved') {
+        const enLangId = await this.languageService.findLanguageByName('en');
+        const enTranslation = translations.find(
+          (t) => t.language_id === enLangId,
+        );
+        const enTitle = escapeSpecialCharacters(enTranslation.title);
+        const enLink = enTranslation.link;
+        const utmLink = `https://spaininter.com/en/news/${enLink}?utm_source=telegram&utm_medium=article`;
+        const tgMessage = `[${enTitle}](${utmLink})`;
+        await this.telegramNewsletterService.sendNewsletter(tgMessage);
+      }
       await t.commit();
     } catch (err) {
       await t.rollback();
@@ -379,19 +400,16 @@ export class NewsService {
     const limit = dto.limit || 10;
     const offset = (page - 1) * limit;
 
-    const enLangId = await this.languageService.findLanguageByName('en');
-
     const news = await this.newsModel.findAndCountAll({
       limit,
       offset,
-      attributes: ['news_id', 'createdAt', 'views'],
+      distinct: true,
+      attributes: ['news_id', 'createdAt', 'views', 'status', 'user_id', 'admin_id'],
       include: [
         {
-          attributes: ['title', 'link'],
+          attributes: ['title', 'link', 'language_id'],
           model: NewsTranslations,
-          where: {
-            language_id: enLangId,
-          },
+          required: false,
         },
       ],
       order: [['createdAt', 'DESC']],
@@ -401,6 +419,157 @@ export class NewsService {
       statusCode: HttpStatus.OK,
       message: 'News fetched successfully',
       data: news,
+    };
+  }
+
+  public async updateNewsStatus(newsId: number, status: NewsStatus) {
+    const adminId = (this.request['user'] as { admin_id?: number } | undefined)
+      ?.admin_id;
+
+    if (!adminId) {
+      throw new HttpException('Unauthorized', HttpStatus.UNAUTHORIZED);
+    }
+
+    const news = await this.newsModel.findOne({
+      where: { news_id: newsId },
+    });
+
+    if (!news) {
+      throw new HttpException('News not found', HttpStatus.NOT_FOUND);
+    }
+
+    const updateData: Partial<News> = { status };
+
+    if (status === 'approved') {
+      updateData.admin_id = adminId;
+    } else {
+      updateData.admin_id = null;
+    }
+
+    await this.newsModel.update(updateData, { where: { news_id: newsId } });
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'News status updated successfully',
+    };
+  }
+
+  public async reviewNews(newsId: number, dto: ReviewNewsDto) {
+    const adminId = (this.request['user'] as { admin_id?: number } | undefined)
+      ?.admin_id;
+
+    if (!adminId) {
+      throw new HttpException('Unauthorized', HttpStatus.UNAUTHORIZED);
+    }
+
+    const news = await this.newsModel.findOne({
+      where: { news_id: newsId },
+    });
+
+    if (!news) {
+      throw new HttpException('News not found', HttpStatus.NOT_FOUND);
+    }
+
+    let categoryId: number | undefined;
+    if (dto.category_name) {
+      categoryId = await this.categoryService.findOrCreateCategory(
+        dto.category_name,
+      );
+    } else if (dto.category_id) {
+      const isCategoryIdExists =
+        await this.categoryService.checkCategoryIdExists(dto.category_id);
+      if (!isCategoryIdExists) {
+        throw new HttpException(
+          'Category does not exist',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      categoryId = dto.category_id;
+    }
+
+    const updateData: Partial<News> = {};
+    if (categoryId !== undefined) updateData.category_id = categoryId;
+    if (dto.poster_link !== undefined) updateData.poster_link = dto.poster_link;
+    if (dto.province !== undefined) updateData.province = dto.province;
+    if (dto.city !== undefined) updateData.city = dto.city;
+    if (dto.ad_link !== undefined) updateData.ad_link = dto.ad_link;
+
+    const t = await this.sequelize.transaction();
+
+    try {
+      if (Object.keys(updateData).length > 0) {
+        await this.newsModel.update(updateData, {
+          where: { news_id: newsId },
+          transaction: t,
+        });
+      }
+
+      if (dto.translations && dto.translations.length > 0) {
+        const languageIds = dto.translations.map((tr) => tr.language_id);
+        const isLanguageExists =
+          await this.languageService.checkLanguageExists(languageIds);
+
+        if (!isLanguageExists) {
+          throw new HttpException(
+            'Language does not exist',
+            HttpStatus.BAD_REQUEST,
+          );
+        }
+
+        for (const translation of dto.translations) {
+          const existing = await this.newsTranslationsModel.findOne({
+            where: {
+              news_id: newsId,
+              language_id: translation.language_id,
+            },
+            transaction: t,
+          });
+
+          const normalizedLink = translation.link
+            ? this.normalizeTranslationLink(
+                translation.link,
+                translation.title,
+                newsId,
+              )
+            : existing?.link ??
+              this.normalizeTranslationLink(undefined, translation.title, newsId);
+
+          if (existing) {
+            await existing.update(
+              {
+                title: translation.title,
+                description: translation.description,
+                content: translation.content,
+                link: normalizedLink,
+              },
+              { transaction: t },
+            );
+          } else {
+            await this.newsTranslationsModel.create(
+              {
+                news_id: newsId,
+                language_id: translation.language_id,
+                title: translation.title,
+                description: translation.description,
+                content: this.escapeJsonString(translation.content),
+                link: normalizedLink,
+              },
+              { transaction: t },
+            );
+          }
+        }
+      }
+
+      await t.commit();
+    } catch (err) {
+      await t.rollback();
+      if (err instanceof HttpException) throw err;
+      throw new HttpException('Failed to review news', HttpStatus.BAD_REQUEST);
+    }
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'News updated successfully',
     };
   }
 
@@ -580,8 +749,13 @@ export class NewsService {
     try {
       // Обновляем каждый перевод
       for (const translation of translations) {
+        const existing = await this.newsTranslationsModel.findOne({
+          where: { news_id: newsId, language_id: translation.languageId },
+          transaction: t,
+        });
+
         const translationUpdateData: any = {};
-        
+
         if (translation.title !== undefined) {
           translationUpdateData.title = translation.title;
         }
@@ -594,14 +768,46 @@ export class NewsService {
 
         // Обновляем перевод, если есть данные для обновления
         if (Object.keys(translationUpdateData).length > 0) {
-          await this.newsTranslationsModel.update(
-            translationUpdateData,
-            {
-              where: { news_id: newsId, language_id: translation.languageId },
-              transaction: t,
-            },
-          );
-          console.log(`🔍 Updated translation for languageId: ${translation.languageId}`);
+          if (existing) {
+            await this.newsTranslationsModel.update(
+              translationUpdateData,
+              {
+                where: { news_id: newsId, language_id: translation.languageId },
+                transaction: t,
+              },
+            );
+            console.log(`🔍 Updated translation for languageId: ${translation.languageId}`);
+          } else {
+            const title = translation.title;
+            const description = translation.description;
+            const content = translation.content;
+
+            if (!title || !description || !content) {
+              throw new HttpException(
+                'title, description, and content are required to create a new translation',
+                HttpStatus.BAD_REQUEST,
+              );
+            }
+
+            const normalizedLink = this.normalizeTranslationLink(
+              undefined,
+              title,
+              newsId,
+            );
+
+            await this.newsTranslationsModel.create(
+              {
+                news_id: newsId,
+                language_id: translation.languageId,
+                title,
+                description,
+                content: this.escapeJsonString(content),
+                link: normalizedLink,
+              },
+              { transaction: t },
+            );
+            console.log(`🔍 Created translation for languageId: ${translation.languageId}`);
+          }
         }
       }
 

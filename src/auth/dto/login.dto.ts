@@ -11,6 +11,9 @@ export class LoginDto {
   first_name: string;
 
   @IsString()
+  auth_date: string;
+
+  @IsString()
   @IsOptional()
   last_name: string;
 

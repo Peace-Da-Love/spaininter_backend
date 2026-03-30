@@ -31,13 +31,17 @@ export class CreateNewsDto {
   @Length(1, 100)
   poster_link: string;
 
+  @IsOptional()
+  @ValidateIf((o) => o.province !== null)
   @IsString()
-  @Length(1, 50)
-  province: string;
+  @Length(0, 50)
+  province?: string | null;
 
+  @IsOptional()
+  @ValidateIf((o) => o.city !== null)
   @IsString()
-  @Length(1, 50)
-  city: string;
+  @Length(0, 50)
+  city?: string | null;
 
   @IsOptional()
   @ValidateIf((o) => o.ad_link !== null)

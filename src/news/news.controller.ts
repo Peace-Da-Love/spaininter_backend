@@ -17,6 +17,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { NewsService } from './news.service';
 import { CreateNewsDto } from './dto/create-news.dto';
 import { Auth } from '../auth/decorators/auth.decorator';
+import { AnyAuth } from '../auth/decorators/any-auth.decorator';
 import { GetNewsForAdminDto } from './dto/get-news-for-admin.dto';
 import { DeleteNewsDto } from './dto/delete-news.dto';
 import { GetNewsByIdDto } from './dto/get-news-by-id.dto';
@@ -24,6 +25,8 @@ import { UpdateNewsDto } from './dto/update-news.dto';
 import { UpdateNewsTranslationDto } from './dto/update-news-translations.dto';
 import { GetLatestNewsDto } from './dto/get-latest-news.dto';
 import { GetCategoryNewsDto } from './dto/get-category-news.dto';
+import { UpdateNewsStatusDto } from './dto/update-news-status.dto';
+import { ReviewNewsDto } from './dto/review-news.dto';
 import { Headers } from '@nestjs/common';
 
 @Controller('news')
@@ -70,7 +73,7 @@ export class NewsController {
     return this.newsService.getCategoryNews(dto, headers['accept-language']);
   }
 
-  @Auth()
+  @AnyAuth()
   @Post('create')
   @HttpCode(HttpStatus.CREATED)
   public async createNews(@Body() dto: CreateNewsDto) {
@@ -89,6 +92,27 @@ export class NewsController {
   @HttpCode(HttpStatus.OK)
   public async deleteNews(@Query() dto: DeleteNewsDto) {
     return this.newsService.deleteNews(dto);
+  }
+
+  @Auth()
+  @Patch(':id/status')
+  @HttpCode(HttpStatus.OK)
+  public async updateNewsStatus(
+    @Param('id') id: string,
+    @Body() dto: UpdateNewsStatusDto,
+  ) {
+    return this.newsService.updateNewsStatus(+id, dto.status);
+  }
+
+  
+  @Auth()
+  @Patch('admin/:id')
+  @HttpCode(HttpStatus.OK)
+  public async reviewNews(
+    @Param('id') id: string,
+    @Body() dto: ReviewNewsDto,
+  ) {
+    return this.newsService.reviewNews(+id, dto);
   }
 
 
