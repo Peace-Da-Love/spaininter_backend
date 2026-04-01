@@ -20,7 +20,7 @@ export class UpdateNewsDto {
   @IsOptional()
   @IsString()
   @IsNotEmpty()
-  @Length(1, 200)
+  @Length(1, 150)
   declare posterLink?: string;
 
   @IsOptional()

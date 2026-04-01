@@ -28,7 +28,7 @@ export class CreateNewsDto {
   category_name?: string;
 
   @IsString()
-  @Length(1, 100)
+  @Length(1, 150)
   poster_link: string;
 
   @IsOptional()
