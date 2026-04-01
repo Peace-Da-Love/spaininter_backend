@@ -824,6 +824,23 @@ export class NewsService {
     };
   }
 
+  public async deleteNewsTranslation(newsId: number, languageId: number) {
+    const existing = await this.newsTranslationsModel.findOne({
+      where: { news_id: newsId, language_id: languageId },
+    });
+
+    if (!existing) {
+      throw new HttpException('News translation not found', HttpStatus.NOT_FOUND);
+    }
+
+    await existing.destroy();
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'News translation deleted successfully',
+    };
+  }
+
   private escapeJsonString(str: string) {
     return str
       .replace(/[\\]/g, '\\\\')

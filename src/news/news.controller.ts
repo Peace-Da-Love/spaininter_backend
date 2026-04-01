@@ -187,4 +187,19 @@ export class NewsController {
     
     return this.newsService.updateNewsTranslations(+id, translations);
   }
+
+  @Auth()
+  @Delete(':id/translations/:languageId')
+  @HttpCode(HttpStatus.OK)
+  public async deleteNewsTranslation(
+    @Param('id') id: string,
+    @Param('languageId') languageId: string,
+  ) {
+    const newsId = Number(id);
+    const langId = Number(languageId);
+    if (Number.isNaN(newsId) || Number.isNaN(langId)) {
+      throw new HttpException('Invalid id or languageId', HttpStatus.BAD_REQUEST);
+    }
+    return this.newsService.deleteNewsTranslation(newsId, langId);
+  }
 }
