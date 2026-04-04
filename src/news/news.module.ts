@@ -5,7 +5,7 @@ import { News } from './news.model';
 import { NewsTranslations } from './news-translations.model';
 import { NewsController } from './news.controller';
 import { LanguagesModule } from '../languages/languages.module';
-import { CategoriesModule } from '../categories/categories.module';
+import { HashtagsModule } from '../hashtags/hashtags.module';
 import { TelegramNewsletterModule } from '../telegram-newsletter/telegram-newsletter.module';
 import { GoogleStorageModule } from '../google-storage/google-storage.module';
 
@@ -13,7 +13,7 @@ import { GoogleStorageModule } from '../google-storage/google-storage.module';
   imports: [
     SequelizeModule.forFeature([News, NewsTranslations]),
     LanguagesModule,
-    CategoriesModule,
+    HashtagsModule,
     TelegramNewsletterModule,
     GoogleStorageModule,
   ],

@@ -40,15 +40,15 @@ export class ReviewNewsTranslationDto {
 export class ReviewNewsDto {
   @IsOptional()
   @IsNumber()
-  category_id?: number;
+  hashtag_id?: number;
 
   @IsOptional()
   @IsString()
   @Length(2, 50)
   @Matches(/^[a-z0-9_]+$/, {
-    message: 'category_name must contain only lowercase letters, numbers, and underscores',
+    message: 'hashtag_name must contain only lowercase letters, numbers, and underscores',
   })
-  category_name?: string;
+  hashtag_name?: string;
 
   @IsOptional()
   @IsString()

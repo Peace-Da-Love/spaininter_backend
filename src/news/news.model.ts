@@ -11,11 +11,11 @@ import {
 } from 'sequelize-typescript';
 import { Admin } from '../auth/admin.model';
 import { NewsTranslations } from './news-translations.model';
-import { Category } from '../categories/categories.model';
+import { Hashtag } from '../hashtags/hashtags.model';
 import { User } from '../users/user.model';
 
 interface NewsCreationAttrs {
-  category_id: number;
+  hashtag_id: number;
   poster_link: string;
   province: string;
   city: string;
@@ -34,13 +34,13 @@ export class News extends Model<News, NewsCreationAttrs> {
   @Column(DataType.INTEGER)
   declare news_id: number;
 
-  @ForeignKey(() => Category)
+  @ForeignKey(() => Hashtag)
   @Column({
     type: DataType.INTEGER,
     allowNull: false,
     unique: false,
   })
-  declare category_id: number;
+  declare hashtag_id: number;
 
   @Column({ type: DataType.STRING, allowNull: false })
   declare poster_link: string;
@@ -92,8 +92,8 @@ export class News extends Model<News, NewsCreationAttrs> {
   })
   declare user: User;
 
-  @BelongsTo(() => Category, 'category_id')
-  declare category: Category;
+  @BelongsTo(() => Hashtag, 'hashtag_id')
+  declare hashtag: Hashtag;
 
   @HasMany(() => NewsTranslations, 'news_id')
   declare newsTranslations: NewsTranslations[];

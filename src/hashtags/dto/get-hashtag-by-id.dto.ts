@@ -1,7 +1,7 @@
 import { IsNumber, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 
-export class GetCategoryById {
+export class GetHashtagByIdDto {
   @IsNumber()
   @Min(1)
   @Type(() => Number)

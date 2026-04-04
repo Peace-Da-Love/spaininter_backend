@@ -1,7 +1,7 @@
 import { IsNumber, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 
-export class DeleteCategoryDto {
+export class DeleteHashtagDto {
   @IsNumber()
   @Min(1)
   @Type(() => Number)

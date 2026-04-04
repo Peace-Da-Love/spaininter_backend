@@ -1,7 +1,6 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
-import { Category } from '../categories/categories.model';
-import { CategoryTranslations } from '../categories/category-translations.model';
+import { Hashtag } from '../hashtags/hashtags.model';
 import { LanguagesService } from '../languages/languages.service';
 import { NewsTranslations } from '../news/news-translations.model';
 import { News } from '../news/news.model';
@@ -12,9 +11,7 @@ import { GetNewsMetadataDto } from './dto/get-news-metadata.dto';
 @Injectable()
 export class MetadataService {
   constructor(
-    @InjectModel(Category) private categoryModel: typeof Category,
-    @InjectModel(CategoryTranslations)
-    private categoryTranslationsModel: typeof CategoryTranslations,
+    @InjectModel(Hashtag) private hashtagModel: typeof Hashtag,
     @InjectModel(News) private newsModel: typeof News,
     @InjectModel(NewsTranslations)
     private newsTranslationsModel: typeof NewsTranslations,
@@ -64,12 +61,10 @@ export class MetadataService {
     };
   }
 
-  public async getCategoryMetadata() {
-    const enLangId = await this.languagesService.findLanguageByName('en');
-
-    const newsCategories = await this.categoryModel.findAll({
+  public async getHashtagMetadata() {
+    const newsHashtags = await this.hashtagModel.findAll({
       attributes: [
-        [col('categoryTranslations.category_name'), 'category_name'],
+        ['hashtag_name', 'hashtag_name'],
         [
           Sequelize.cast(
             Sequelize.literal('CEIL(COUNT(news_id)::numeric / 8::numeric)'),
@@ -79,36 +74,31 @@ export class MetadataService {
         ],
         [
           Sequelize.literal(
-            '(SELECT MAX(news."updatedAt") FROM news WHERE news.category_id = "Category"."category_id")',
+            '(SELECT MAX(news.\"updatedAt\") FROM news WHERE news.hashtag_id = \"Hashtag\".\"hashtag_id\")',
           ),
           'last_modified',
         ],
       ],
       include: [
         {
-          model: CategoryTranslations,
-          attributes: [],
-          where: { language_id: enLangId },
-        },
-        {
           model: News,
           attributes: [],
         },
       ],
-      group: ['Category.category_id', 'categoryTranslations.translation_id'],
+      group: ['Hashtag.hashtag_id', 'Hashtag.hashtag_name'],
     });
 
     const countNews = await this.newsModel.count();
     const latestNews = {
-      category_name: 'latest',
+      hashtag_name: 'latest',
       pages_count: Math.ceil(countNews / 8),
       last_modified: await this.newsModel.max('updatedAt'),
     };
 
     return {
       statusCode: 200,
-      message: 'Categories have been found',
-      data: [...newsCategories, latestNews],
+      message: 'Hashtags have been found',
+      data: [...newsHashtags, latestNews],
     };
   }
 

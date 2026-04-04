@@ -7,25 +7,25 @@ import {
   IsOptional,
   ArrayMinSize,
   Length,
-  ValidateIf,
   Matches,
+  ValidateIf,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateNewsDto {
-  @ValidateIf((o) => !o.category_name)
-  @IsNotEmpty({ message: 'Either category_id or category_name must be provided' })
+  @ValidateIf((o) => !o.hashtag_name)
+  @IsNotEmpty({ message: 'Either hashtag_id or hashtag_name must be provided' })
   @IsNumber()
-  category_id?: number;
+  hashtag_id?: number;
 
-  @ValidateIf((o) => !o.category_id)
-  @IsNotEmpty({ message: 'Either category_id or category_name must be provided' })
+  @ValidateIf((o) => !o.hashtag_id)
+  @IsNotEmpty({ message: 'Either hashtag_id or hashtag_name must be provided' })
   @IsString()
   @Length(2, 50)
   @Matches(/^[a-z0-9_]+$/, {
-    message: 'category_name must contain only lowercase letters, numbers, and underscores',
+    message: 'hashtag_name must contain only lowercase letters, numbers, and underscores',
   })
-  category_name?: string;
+  hashtag_name?: string;
 
   @IsString()
   @Length(1, 150)

@@ -24,7 +24,7 @@ import { GetNewsByIdDto } from './dto/get-news-by-id.dto';
 import { UpdateNewsDto } from './dto/update-news.dto';
 import { UpdateNewsTranslationDto } from './dto/update-news-translations.dto';
 import { GetLatestNewsDto } from './dto/get-latest-news.dto';
-import { GetCategoryNewsDto } from './dto/get-category-news.dto';
+import { GetHashtagNewsDto } from './dto/get-hashtag-news.dto';
 import { UpdateNewsStatusDto } from './dto/update-news-status.dto';
 import { ReviewNewsDto } from './dto/review-news.dto';
 import { Headers } from '@nestjs/common';
@@ -67,10 +67,10 @@ export class NewsController {
   @Get('filter')
   @HttpCode(HttpStatus.OK)
   public async filterNews(
-    @Query() dto: GetCategoryNewsDto,
+    @Query() dto: GetHashtagNewsDto,
     @Headers() headers: any,
   ) {
-    return this.newsService.getCategoryNews(dto, headers['accept-language']);
+    return this.newsService.getHashtagNews(dto, headers['accept-language']);
   }
 
   @AnyAuth()

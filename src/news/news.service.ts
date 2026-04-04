@@ -8,10 +8,9 @@ import { LanguagesService } from '../languages/languages.service';
 import { GetNewsForAdminDto } from './dto/get-news-for-admin.dto';
 import { linkFormatter } from '../common/utils/link-formatter';
 import { DeleteNewsDto } from './dto/delete-news.dto';
-import { CategoriesService } from '../categories/categories.service';
-import { CategoryTranslations } from '../categories/category-translations.model';
-import { Category } from '../categories/categories.model';
-import { col, literal, Op } from 'sequelize';
+import { HashtagsService } from '../hashtags/hashtags.service';
+import { Hashtag } from '../hashtags/hashtags.model';
+import { col, literal } from 'sequelize';
 import { Sequelize } from 'sequelize-typescript';
 import { UpdateNewsDto } from './dto/update-news.dto';
 import { UpdateNewsTranslationDto } from './dto/update-news-translations.dto';
@@ -20,7 +19,7 @@ import { escapeSpecialCharacters, removeInvalidCharacters } from '../common/util
 import { Language } from '../languages/languages.model';
 import { GetNewsByIdDto } from './dto/get-news-by-id.dto';
 import { GetLatestNewsDto } from './dto/get-latest-news.dto';
-import { GetCategoryNewsDto } from './dto/get-category-news.dto';
+import { GetHashtagNewsDto } from './dto/get-hashtag-news.dto';
 import { GoogleStorageService } from '../google-storage/google-storage.service';
 import { transliterate as tr } from 'transliteration';
 import { ReviewNewsDto } from './dto/review-news.dto';
@@ -33,7 +32,7 @@ export class NewsService {
     private newsTranslationsModel: typeof NewsTranslations,
     @Inject(REQUEST) private readonly request: Request,
     private readonly languageService: LanguagesService,
-    private readonly categoryService: CategoriesService,
+    private readonly hashtagService: HashtagsService,
     private readonly telegramNewsletterService: TelegramNewsletterService,
     private readonly googleStorageService: GoogleStorageService,
     private sequelize: Sequelize,
@@ -50,13 +49,13 @@ export class NewsService {
         [col('newsTranslations.title'), 'title'],
         [col('newsTranslations.content'), 'content'],
         [col('newsTranslations.link'), 'link'],
-        [col('category.category_id'), 'categoryId'],
-        [col('category.category_name'), 'categoryName'],
+        [col('hashtag.hashtag_id'), 'hashtagId'],
+        [col('hashtag.hashtag_name'), 'hashtagName'],
         [
           literal(
-            `COALESCE(category.category_name, '')`,
+            `COALESCE(hashtag.hashtag_name, '')`,
           ),
-          'categoryLink',
+          'hashtagLink',
         ],
         'views',
         'createdAt',
@@ -78,7 +77,8 @@ export class NewsService {
         },
         {
           attributes: [],
-          model: Category,
+          model: Hashtag,
+          as: 'hashtag',
         },
       ],
     });
@@ -115,13 +115,13 @@ export class NewsService {
         [col('newsTranslations.description'), 'description'],
         [col('newsTranslations.content'), 'content'],
         [col('newsTranslations.link'), 'link'],
-        [col('category.category_id'), 'categoryId'],
-        [col('category.category_name'), 'categoryName'],
+        [col('hashtag.hashtag_id'), 'hashtagId'],
+        [col('hashtag.hashtag_name'), 'hashtagName'],
         [
           literal(
-            `COALESCE(category.category_name, '')`,
+            `COALESCE(hashtag.hashtag_name, '')`,
           ),
-          'categoryLink',
+          'hashtagLink',
         ],
         'views',
         'createdAt',
@@ -143,7 +143,8 @@ export class NewsService {
         },
         {
           attributes: [],
-          model: Category,
+          model: Hashtag,
+          as: 'hashtag',
         },
       ],
     });
@@ -173,12 +174,12 @@ export class NewsService {
         'city',
         [col('newsTranslations.title'), 'title'],
         [col('newsTranslations.link'), 'link'],
-        [col('category.category_name'), 'categoryName'],
+        [col('hashtag.hashtag_name'), 'hashtagName'],
         [
           literal(
-            `COALESCE(category.category_name, '')`,
+            `COALESCE(hashtag.hashtag_name, '')`,
           ),
-          'categoryLink',
+          'hashtagLink',
         ],
         ['poster_link', 'posterLink'],
         'createdAt',
@@ -198,8 +199,8 @@ export class NewsService {
         },
         {
           attributes: [],
-          as: 'category',
-          model: Category,
+          as: 'hashtag',
+          model: Hashtag,
         },
       ],
       subQuery: false,
@@ -224,31 +225,34 @@ export class NewsService {
     };
   }
 
-  public async getCategoryNews(dto: GetCategoryNewsDto, languageCode?: string) {
+  public async getHashtagNews(dto: GetHashtagNewsDto, languageCode?: string) {
     const page = Number(dto.page) || 1;
     const limit = Number(dto.limit) || 10;
     const offset = (page - 1) * limit;
 
-    // Ищем категорию по имени (поддерживаем старый формат с дефисами для обратной совместимости)
-    const categoryName = dto.category.toLowerCase().replace(/-/g, '_');
-    const category =
-      await this.categoryService.findCategoryByName(categoryName);
+    if (!dto.hashtag) {
+      throw new HttpException('hashtag is required', HttpStatus.BAD_REQUEST);
+    }
+
+    // Look up hashtag by name (supports hyphenated format)
+    const hashtagName = dto.hashtag.toLowerCase().replace(/-/g, '_');
+    const hashtagId = await this.hashtagService.findHashtagByName(hashtagName);
 
     const news = await this.newsModel.findAll({
       limit,
       offset,
-      where: { category_id: category, status: 'approved' },
+      where: { hashtag_id: hashtagId, status: 'approved' },
       attributes: [
         ['news_id', 'newsId'],
         'city',
         [col('newsTranslations.title'), 'title'],
         [col('newsTranslations.link'), 'link'],
-        [col('category.category_name'), 'categoryName'],
+        [col('hashtag.hashtag_name'), 'hashtagName'],
         [
           literal(
-            `COALESCE(category.category_name, '')`,
+            `COALESCE(hashtag.hashtag_name, '')`,
           ),
-          'categoryLink',
+          'hashtagLink',
         ],
         ['poster_link', 'posterLink'],
         'createdAt',
@@ -268,8 +272,8 @@ export class NewsService {
         },
         {
           attributes: [],
-          as: 'category',
-          model: Category,
+          as: 'hashtag',
+          model: Hashtag,
         },
       ],
       subQuery: false,
@@ -277,7 +281,7 @@ export class NewsService {
     });
 
     const newsCount = await this.newsModel.count({
-      where: { category_id: category, status: 'approved' },
+      where: { hashtag_id: hashtagId, status: 'approved' },
     });
     const pageCount = Math.ceil(newsCount / limit);
     const hasNextPage = page < pageCount;
@@ -306,29 +310,25 @@ export class NewsService {
       throw new HttpException('Unauthorized', HttpStatus.UNAUTHORIZED);
     }
 
-    let categoryId: number;
+    let hashtagId: number;
 
-    // Если передан category_name, найти или создать категорию
-    if (dto.category_name) {
-      categoryId = await this.categoryService.findOrCreateCategory(
-        dto.category_name,
-      );
-    } else if (dto.category_id) {
-      // Если передан category_id, проверить его существование
-      const isCategoryIdExists = await this.categoryService.checkCategoryIdExists(
-        dto.category_id,
+    if (dto.hashtag_name) {
+      hashtagId = await this.hashtagService.findOrCreateHashtag(dto.hashtag_name);
+    } else if (dto.hashtag_id) {
+      const isHashtagIdExists = await this.hashtagService.checkHashtagIdExists(
+        dto.hashtag_id,
       );
 
-      if (!isCategoryIdExists)
+      if (!isHashtagIdExists)
         throw new HttpException(
-          'Category does not exist',
+          'Hashtag does not exist',
           HttpStatus.BAD_REQUEST,
         );
 
-      categoryId = dto.category_id;
+      hashtagId = dto.hashtag_id;
     } else {
       throw new HttpException(
-        'Either category_id or category_name must be provided',
+        'Either hashtag_id or hashtag_name must be provided',
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -347,7 +347,7 @@ export class NewsService {
 
     try {
       const news = await this.newsModel.create({
-        category_id: categoryId,
+        hashtag_id: hashtagId,
         admin_id: adminId,
         user_id: userId,
         status,
@@ -470,25 +470,26 @@ export class NewsService {
       throw new HttpException('News not found', HttpStatus.NOT_FOUND);
     }
 
-    let categoryId: number | undefined;
-    if (dto.category_name) {
-      categoryId = await this.categoryService.findOrCreateCategory(
-        dto.category_name,
+    let hashtagId: number | undefined;
+
+    if (dto.hashtag_name) {
+      hashtagId = await this.hashtagService.findOrCreateHashtag(
+        dto.hashtag_name,
       );
-    } else if (dto.category_id) {
-      const isCategoryIdExists =
-        await this.categoryService.checkCategoryIdExists(dto.category_id);
-      if (!isCategoryIdExists) {
+    } else if (dto.hashtag_id) {
+      const isHashtagIdExists =
+        await this.hashtagService.checkHashtagIdExists(dto.hashtag_id);
+      if (!isHashtagIdExists) {
         throw new HttpException(
-          'Category does not exist',
+          'Hashtag does not exist',
           HttpStatus.BAD_REQUEST,
         );
       }
-      categoryId = dto.category_id;
+      hashtagId = dto.hashtag_id;
     }
 
     const updateData: Partial<News> = {};
-    if (categoryId !== undefined) updateData.category_id = categoryId;
+    if (hashtagId !== undefined) updateData.hashtag_id = hashtagId;
     if (dto.poster_link !== undefined) updateData.poster_link = dto.poster_link;
     if (dto.province !== undefined) updateData.province = dto.province;
     if (dto.city !== undefined) updateData.city = dto.city;

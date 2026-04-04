@@ -1,7 +1,7 @@
 import { IsNumber, IsOptional, IsString, Length, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 
-export class GetCategoryNewsDto {
+export class GetHashtagNewsDto {
   @IsOptional()
   @IsNumber()
   @Min(1)
@@ -16,5 +16,5 @@ export class GetCategoryNewsDto {
 
   @IsString()
   @Length(2, 50)
-  declare category: string;
+  declare hashtag: string;
 }

@@ -6,10 +6,10 @@ import { GetNewsMetadataDto } from './dto/get-news-metadata.dto';
 export class MetadataController {
   constructor(private readonly metadataService: MetadataService) {}
 
-  @Get('categories')
+  @Get('hashtags')
   @HttpCode(HttpStatus.OK)
-  public async getCategoryMetadata() {
-    return this.metadataService.getCategoryMetadata();
+  public async getHashtagMetadata() {
+    return this.metadataService.getHashtagMetadata();
   }
 
   @Get('news')

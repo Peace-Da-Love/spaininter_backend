@@ -7,7 +7,6 @@ import {
   AutoIncrement,
   HasMany,
 } from 'sequelize-typescript';
-import { CategoryTranslations } from '../categories/category-translations.model';
 import { NewsTranslations } from '../news/news-translations.model';
 
 interface LanguageCreationAttrs {
@@ -31,9 +30,6 @@ export class Language extends Model<Language, LanguageCreationAttrs> {
 
   @Column({ type: DataType.STRING(50), allowNull: false, unique: true })
   declare language_name: string;
-
-  @HasMany(() => CategoryTranslations, 'language_id')
-  declare categoryTranslations: CategoryTranslations[];
 
   @HasMany(() => NewsTranslations, 'language_id')
   declare newsTranslation: NewsTranslations[];
