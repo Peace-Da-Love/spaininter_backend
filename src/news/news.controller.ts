@@ -11,6 +11,7 @@ import {
   Post,
   Query,
   UploadedFile,
+  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -28,6 +29,7 @@ import { GetHashtagNewsDto } from './dto/get-hashtag-news.dto';
 import { UpdateNewsStatusDto } from './dto/update-news-status.dto';
 import { ReviewNewsDto } from './dto/review-news.dto';
 import { Headers } from '@nestjs/common';
+import { UserJwtGuard } from '../user-auth/guards/user-jwt.guard';
 
 @Controller('news')
 export class NewsController {
@@ -71,6 +73,13 @@ export class NewsController {
     @Headers() headers: any,
   ) {
     return this.newsService.getHashtagNews(dto, headers['accept-language']);
+  }
+
+  @UseGuards(UserJwtGuard)
+  @Get('my')
+  @HttpCode(HttpStatus.OK)
+  public async getMyNews() {
+    return this.newsService.getMyNewsForUser();
   }
 
   @AnyAuth()

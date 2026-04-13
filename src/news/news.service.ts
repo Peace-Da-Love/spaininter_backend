@@ -300,6 +300,52 @@ export class NewsService {
     };
   }
 
+  public async getMyNewsForUser() {
+    const actor = this.request['user'] as { user_id?: number } | undefined;
+    const userId = actor?.user_id;
+
+    if (!userId) {
+      throw new HttpException('Unauthorized', HttpStatus.UNAUTHORIZED);
+    }
+
+    const news = await this.newsModel.findAndCountAll({
+      where: { user_id: userId },
+      attributes: [
+        'views',
+        'createdAt',
+        'status',
+      ],
+      include: [
+        {
+          as: 'newsTranslations',
+          model: NewsTranslations,
+          attributes: ['title', 'link', 'language_id'],
+          required: false,
+        },
+      ],
+      order: [['createdAt', 'DESC']],
+      subQuery: false,
+    });
+
+    const rows = news.rows.map((row) => {
+      const plain = row.get({ plain: true }) as unknown as Record<string, unknown>;
+      delete plain.news_id;
+      delete plain.admin_id;
+      return plain;
+    });
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'News fetched successfully',
+      data: {
+        news: {
+          count: news.count,
+          rows,
+        },
+      },
+    };
+  }
+
   public async createNews(dto: CreateNewsDto) {
     const actor = this.request['user'] as { admin_id?: number; user_id?: number } | undefined;
     const adminId = actor?.admin_id ?? null;
