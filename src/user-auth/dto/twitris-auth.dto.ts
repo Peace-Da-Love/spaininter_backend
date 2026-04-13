@@ -7,9 +7,16 @@ import {
 } from 'class-validator';
 
 export class TwitrisAuthDto {
+  /**
+   * Telegram WebApp initData string (querystring) which includes `hash`.
+   * If provided, server should verify auth using Telegram's data-check-string algorithm.
+   */
   @IsString()
   @IsNotEmpty()
-  telegram_id: string;
+  initData: string;
+
+  // Filled from Telegram initData.user (server-side)
+  telegram_id?: string;
 
   @IsOptional()
   @IsString()
@@ -44,11 +51,5 @@ export class TwitrisAuthDto {
   @IsString()
   gift_rarity?: string;
 
-  @IsInt()
-  @Min(1)
-  timestamp: number;
 
-  @IsString()
-  @IsNotEmpty()
-  signature: string;
 }

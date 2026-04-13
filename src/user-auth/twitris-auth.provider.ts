@@ -17,53 +17,181 @@ export class TwitrisAuthProvider {
     return Math.abs(now - timestamp) > 300; // 5 minutes
   }
 
+  private calcTelegramInitDataHash(
+    dataCheckString: string,
+    botToken: string,
+  ): string {
+    // Telegram Mini App spec:
+    // secret_key = HMAC_SHA256(<bot_token>, "WebAppData")
+    // hash = hex(HMAC_SHA256(data_check_string, secret_key))
+    const secretKey = createHmac('sha256', 'WebAppData')
+      .update(botToken)
+      .digest();
+
+    return createHmac('sha256', new Uint8Array(secretKey))
+      .update(dataCheckString)
+      .digest('hex');
+  }
+
+  private safeHexEqual(expectedHex: string, receivedHex?: string): boolean {
+    if (!receivedHex) return false;
+    if (
+      !/^[0-9a-f]{64}$/i.test(expectedHex) ||
+      !/^[0-9a-f]{64}$/i.test(receivedHex)
+    ) {
+      return false;
+    }
+
+    const expected = new Uint8Array(Buffer.from(expectedHex, 'hex'));
+    const received = new Uint8Array(Buffer.from(receivedHex, 'hex'));
+    return timingSafeEqual(expected, received);
+  }
+
+  private verifyTelegramInitData(initData: string): {
+    ok: boolean;
+    dataCheckString: string;
+    expectedHash: string;
+    receivedHash?: string;
+    validationMode: 'no-signature' | 'with-signature';
+    paramKeys: string[];
+    warnings: string[];
+    authDate?: number;
+    telegramUser?: {
+      id: number;
+      username?: string;
+      first_name?: string;
+      last_name?: string;
+      photo_url?: string;
+    };
+  } {
+    const params = new URLSearchParams(initData);
+    const receivedHash = params.get('hash') ?? undefined;
+    const hasSignature = params.has('signature');
+    const paramKeys = Array.from(params.keys());
+    const warnings: string[] = [];
+
+    const botToken = this.configService.get<string>('TWITRIS_BOT_TOKEN');
+    if (!botToken) {
+      throw new HttpException(
+        'TWITRIS_BOT_TOKEN is not configured',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    const dataPairs: string[] = [];
+    for (const [key, value] of params.entries()) {
+      if (key === 'hash' || key === 'signature') continue;
+      dataPairs.push(`${key}=${value}`);
+    }
+    dataPairs.sort();
+    const dataCheckString = dataPairs.join('\n');
+
+    const expectedHash = this.calcTelegramInitDataHash(dataCheckString, botToken);
+    let validationMode: 'no-signature' | 'with-signature' = 'no-signature';
+    let ok = this.safeHexEqual(expectedHash, receivedHash);
+
+    // Compatibility fallback for clients/environments where `signature`
+    // was included in Telegram hash data-check-string.
+    if (!ok && hasSignature) {
+      const dataPairsWithSignature: string[] = [];
+      for (const [key, value] of params.entries()) {
+        if (key === 'hash') continue;
+        dataPairsWithSignature.push(`${key}=${value}`);
+      }
+      dataPairsWithSignature.sort();
+      const dataCheckWithSignature = dataPairsWithSignature.join('\n');
+      const expectedHashWithSignature = this.calcTelegramInitDataHash(
+        dataCheckWithSignature,
+        botToken,
+      );
+
+      if (this.safeHexEqual(expectedHashWithSignature, receivedHash)) {
+        ok = true;
+        validationMode = 'with-signature';
+      }
+    }
+
+    const authDateRaw = params.get('auth_date');
+    const authDate = authDateRaw ? Number(authDateRaw) : undefined;
+    if (!authDateRaw) warnings.push('auth_date missing');
+    if (authDateRaw && !/^\d+$/.test(authDateRaw)) {
+      warnings.push('auth_date is not numeric');
+    }
+
+    const userRaw = params.get('user');
+    let telegramUser:
+      | {
+          id: number;
+          username?: string;
+          first_name?: string;
+          last_name?: string;
+          photo_url?: string;
+        }
+      | undefined;
+    if (userRaw) {
+      try {
+        telegramUser = JSON.parse(userRaw);
+      } catch {
+        warnings.push('user JSON parse failed');
+      }
+    } else {
+      warnings.push('user missing');
+    }
+
+    if (!params.get('query_id')) warnings.push('query_id missing');
+    if (!receivedHash) warnings.push('hash missing');
+    if (params.getAll('auth_date').length > 1) {
+      warnings.push('auth_date repeated');
+    }
+
+    return {
+      ok,
+      dataCheckString,
+      expectedHash,
+      receivedHash,
+      validationMode,
+      paramKeys,
+      warnings,
+      authDate: Number.isFinite(authDate) ? authDate : undefined,
+      telegramUser,
+    };
+  }
+
   private buildCanonical(dto: TwitrisAuthDto): string {
     return Object.entries(dto)
-      .filter(([key, value]) => key !== 'signature' && value !== undefined)
+      .filter(
+        ([key, value]) =>
+          key !== 'signature' &&
+          value !== undefined &&
+          value !== null &&
+          value !== '',
+      )
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([k, v]) => `${k}=${v}`)
       .join('\n');
   }
 
   public async verifyAndUpsert(dto: TwitrisAuthDto) {
-    if (this.isReplay(dto.timestamp)) {
-      throw new HttpException('Replay detected', HttpStatus.UNAUTHORIZED);
+    if (!dto.initData) {
+      throw new HttpException('initData missing', HttpStatus.UNAUTHORIZED);
     }
 
-    const secret = this.configService.get<string>('TWITRIS_BOT_SECRET');
-    if (!secret) {
-      throw new HttpException(
-        'TWITRIS_BOT_SECRET is not configured',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
+    const telegram = this.verifyTelegramInitData(dto.initData);
 
-    const canonical = this.buildCanonical(dto);
-
-    const expectedSignature = createHmac('sha256', secret)
-      .update(canonical)
-      .digest('hex');
-
-    if (!dto.signature) {
-    throw new HttpException('Signature missing', HttpStatus.UNAUTHORIZED);
-    }
-
-    const expected = Buffer.from(expectedSignature, 'utf8');
-    const received = Buffer.from(dto.signature, 'utf8');
-    if (expected.length !== received.length) {
-    throw new HttpException('Invalid signature', HttpStatus.UNAUTHORIZED);
-    }
-
-    const isValid = timingSafeEqual(
-    new Uint8Array(expected),
-    new Uint8Array(received),
-    );
-
-    if (!isValid) {
+    if (!telegram.ok) {
       throw new HttpException('Invalid signature', HttpStatus.UNAUTHORIZED);
     }
 
-    const tgId = dto.telegram_id;
+    const telegramUser = telegram.telegramUser;
+    dto.username = dto.username ?? telegramUser?.username;
+    dto.first_name = dto.first_name ?? telegramUser?.first_name;
+    dto.last_name = dto.last_name ?? telegramUser?.last_name;
+    dto.photo_url = dto.photo_url ?? telegramUser?.photo_url;
+
+    const tgId = telegramUser?.id ? String(telegramUser.id) : undefined;
+    if (!tgId) {
+      throw new HttpException('telegram_id missing', HttpStatus.UNAUTHORIZED);
+    }
 
     let user = await this.userModel.findOne({ where: { tg_id: tgId } });
 
@@ -97,3 +225,4 @@ export class TwitrisAuthProvider {
     return user;
   }
 }
+
