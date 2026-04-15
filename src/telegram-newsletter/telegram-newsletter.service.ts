@@ -19,7 +19,7 @@ export class TelegramNewsletterService {
     @InjectModel(TgChannel) private tgChannelModel: typeof TgChannel,
     private readonly configService: ConfigService,
   ) {
-    this.BOT_TOKEN = this.configService.get('NEWS_BOT_TOKEN');
+    this.BOT_TOKEN = this.configService.get('TWITRIS_BOT_TOKEN');
     this.BOT = new Telegraf(this.BOT_TOKEN);
   }
 
