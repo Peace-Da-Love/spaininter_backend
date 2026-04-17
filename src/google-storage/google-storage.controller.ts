@@ -8,13 +8,13 @@ import {
 } from '@nestjs/common';
 import { GoogleStorageService } from './google-storage.service';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { Auth } from '../auth/decorators/auth.decorator';
+import { AnyAuth } from '../auth/decorators/any-auth.decorator';
 
 @Controller('google-storage')
 export class GoogleStorageController {
   constructor(private readonly googleStorageService: GoogleStorageService) {}
 
-  @Auth()
+  @AnyAuth()
   @Post('upload-file')
   @UseInterceptors(
     FileInterceptor('file', {
