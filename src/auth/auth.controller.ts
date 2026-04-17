@@ -32,7 +32,7 @@ export class AuthController {
       data: { refresh_token, access_token },
       ...rest
     } = await this.authService.login(dto);
-    res.cookie('refresh_token', refresh_token, {
+    res.cookie('admin_refresh_token', refresh_token, {
       httpOnly: true,
       maxAge: 1000 * 60 * 60 * 24 * 30,
     });
@@ -45,12 +45,12 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const validatedToken = req.cookies.refresh_token;
+    const validatedToken = req.cookies.admin_refresh_token;
     const {
       data: { refresh_token, access_token },
       ...rest
     } = await this.authService.refresh(validatedToken);
-    res.cookie('refresh_token', refresh_token, {
+    res.cookie('admin_refresh_token', refresh_token, {
       httpOnly: true,
       maxAge: 1000 * 60 * 60 * 24 * 30, // 30 days
     });
@@ -63,8 +63,8 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const refreshToken = req.cookies.refresh_token;
-    res.clearCookie('refresh_token');
+    const refreshToken = req.cookies.admin_refresh_token;
+    res.clearCookie('admin_refresh_token');
     return this.authService.logOut(refreshToken);
   }
 

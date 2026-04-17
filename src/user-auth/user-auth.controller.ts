@@ -35,7 +35,7 @@ export class UserAuthController {
     const tokens = await this.userTokenService.generateTokens({ user_id: userId });
     await this.userTokenService.saveToken(userId, tokens.refresh_token);
 
-    res.cookie('refresh_token', tokens.refresh_token, {
+    res.cookie('user_refresh_token', tokens.refresh_token, {
       httpOnly: true,
       secure: false, // true в prod
       sameSite: 'lax',

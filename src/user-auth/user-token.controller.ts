@@ -21,7 +21,7 @@ export class UserTokenController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
     ) {
-    const refreshToken = req.cookies.refresh_token;
+    const refreshToken = req.cookies.user_refresh_token;
 
     if (!refreshToken) {
         throw new HttpException('No refresh token', HttpStatus.UNAUTHORIZED);
@@ -30,7 +30,7 @@ export class UserTokenController {
     const { accessToken, refreshToken: newRefreshToken } =
         await this.userAuthService.refresh(refreshToken);
 
-    res.cookie('refresh_token', newRefreshToken, {
+    res.cookie('user_refresh_token', newRefreshToken, {
         httpOnly: true,
         secure: false,
         sameSite: 'lax',
@@ -45,8 +45,8 @@ export class UserTokenController {
     @Delete('logout')
     @HttpCode(HttpStatus.OK)
     public async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
-        const refreshToken = req.cookies.refresh_token;
-        res.clearCookie('refresh_token');
+        const refreshToken = req.cookies.user_refresh_token;
+        res.clearCookie('user_refresh_token');
         return this.userAuthService.logOut(refreshToken);
     }
 }
