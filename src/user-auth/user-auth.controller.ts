@@ -1,5 +1,5 @@
 import { Body, 
-  Controller, Post, HttpCode, HttpStatus, UnauthorizedException, Res,  } from '@nestjs/common';
+  Controller, Post, HttpCode, HttpStatus, UnauthorizedException, Res } from '@nestjs/common';
 import { Response } from 'express';
 import { UserAuthService } from './user-auth.service';
 import { TwitrisAuthDto } from './dto/twitris-auth.dto';
@@ -24,26 +24,26 @@ export class UserAuthController {
   @Post('handoff')
   @HttpCode(HttpStatus.OK)
   public async handoff(
-  @Body() dto: HandoffDto,
-  @Res({ passthrough: true }) res: Response,
+    @Body() dto: HandoffDto,
+    @Res({ passthrough: true }) res: Response,
   ) {
-  const userId = await this.authHandoffService.consume(dto.authToken);
-  if (!userId) {
-    throw new UnauthorizedException('Invalid or expired authToken');
-  }
+    const userId = await this.authHandoffService.consume(dto.authToken);
+    if (!userId) {
+      throw new UnauthorizedException('Invalid or expired authToken');
+    }
 
-  const tokens = await this.userTokenService.generateTokens({ user_id: userId });
-  await this.userTokenService.saveToken(userId, tokens.refresh_token);
+    const tokens = await this.userTokenService.generateTokens({ user_id: userId });
+    await this.userTokenService.saveToken(userId, tokens.refresh_token);
 
-  res.cookie('refresh_token', tokens.refresh_token, {
-    httpOnly: true,
-    secure: false, // true в prod
-    sameSite: 'lax',
-    path: '/',
-    maxAge: 1000 * 60 * 60 * 24 * 30,
-  });
+    res.cookie('refresh_token', tokens.refresh_token, {
+      httpOnly: true,
+      secure: false, // true в prod
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 1000 * 60 * 60 * 24 * 30,
+    });
 
-  return { accessToken: tokens.access_token };
+    return { accessToken: tokens.access_token };
   }
 
 }

@@ -12,11 +12,6 @@ export class TwitrisAuthProvider {
     @InjectModel(User) private userModel: typeof User,
   ) {}
 
-  private isReplay(timestamp: number): boolean {
-    const now = Math.floor(Date.now() / 1000);
-    return Math.abs(now - timestamp) > 300; // 5 minutes
-  }
-
   private calcTelegramInitDataHash(
     dataCheckString: string,
     botToken: string,
@@ -157,20 +152,6 @@ export class TwitrisAuthProvider {
     };
   }
 
-  private buildCanonical(dto: TwitrisAuthDto): string {
-    return Object.entries(dto)
-      .filter(
-        ([key, value]) =>
-          key !== 'signature' &&
-          value !== undefined &&
-          value !== null &&
-          value !== '',
-      )
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([k, v]) => `${k}=${v}`)
-      .join('\n');
-  }
-
   public async verifyAndUpsert(dto: TwitrisAuthDto) {
     if (!dto.initData) {
       throw new HttpException('initData missing', HttpStatus.UNAUTHORIZED);
@@ -225,4 +206,3 @@ export class TwitrisAuthProvider {
     return user;
   }
 }
-
