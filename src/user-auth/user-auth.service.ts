@@ -23,8 +23,13 @@ export class UserAuthService {
 
     try {
       const user = await this.twitrisAuthProvider.verifyAndUpsert(dto);
+      if (dto.sessionId) {
+        await this.authHandoffService.saveSession(dto.sessionId, user.id);
+        this.logger.log(`[AUTH] twitris login success userId=${user.id}`);
+        return { ok: true };
+      }
 
-      // Create one-time auth handoff token stored in Redis
+      // Backward compatibility path for old handoff flow.
       const authToken = await this.authHandoffService.create(user.id);
 
       this.logger.log(`[AUTH] twitris login success userId=${user.id}`);
@@ -76,4 +81,21 @@ export class UserAuthService {
     await this.userTokenService.deleteToken(payload.data.user_id, refreshToken);
     return { ok: true };
   }
+
+  public async consumeAuthSession(sessionId: string) {
+    const userId = await this.authHandoffService.consumeSession(sessionId);
+    if (!userId) {
+      return { success: false as const };
+    }
+
+    const tokens = await this.userTokenService.generateTokens({ user_id: userId });
+    await this.userTokenService.saveToken(userId, tokens.refresh_token);
+
+    return {
+      success: true as const,
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token,
+    };
+  }
+
 }

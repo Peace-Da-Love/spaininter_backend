@@ -46,7 +46,12 @@ export class UserTokenController {
     @HttpCode(HttpStatus.OK)
     public async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
         const refreshToken = req.cookies.user_refresh_token;
-        res.clearCookie('user_refresh_token');
+        res.clearCookie('user_refresh_token', {
+            httpOnly: true,
+            secure: false,
+            sameSite: 'lax',
+            path: "/",
+        });
         return this.userAuthService.logOut(refreshToken);
     }
 }

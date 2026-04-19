@@ -1,9 +1,8 @@
 import {
-  IsInt,
   IsOptional,
   IsString,
   IsNotEmpty,
-  Min,
+  IsUUID,
 } from 'class-validator';
 
 export class TwitrisAuthDto {
@@ -14,6 +13,10 @@ export class TwitrisAuthDto {
   @IsString()
   @IsNotEmpty()
   initData: string;
+
+  @IsOptional()
+  @IsUUID()
+  sessionId?: string;
 
   // Filled from Telegram initData.user (server-side)
   telegram_id?: string;
