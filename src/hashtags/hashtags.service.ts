@@ -5,7 +5,7 @@ import { CreateHashtagDto } from './dto/create-hashtag.dto';
 import { DeleteHashtagDto } from './dto/delete-hashtag.dto';
 import { GetHashtagByIdDto } from './dto/get-hashtag-by-id.dto';
 import { Sequelize } from 'sequelize-typescript';
-import { Op } from 'sequelize';
+import { col, fn, literal, Op } from 'sequelize';
 import { News } from '../news/news.model';
 import { UpdateHashtagDto } from './dto/update-hashtag.dto';
 
@@ -43,10 +43,31 @@ export class HashtagsService {
 
   public async getHashtags() {
     const hashtags = await this.hashtagModel.findAll({
-      attributes: ['hashtag_id', 'hashtag_name', 'createdAt'],
+      attributes: [
+        'hashtag_id',
+        'hashtag_name',
+        'createdAt',
+        [fn('COUNT', col('blogs.news_id')), 'news_count'],
+      ],
       where: {
         hashtag_name: { [Op.ne]: null },
       },
+      include: [
+        {
+          model: News,
+          as: 'blogs',
+          attributes: [],
+          where: {
+            status: 'approved',
+          },
+          required: false,
+        },
+      ],
+      group: ['Hashtag.hashtag_id', 'Hashtag.hashtag_name', 'Hashtag.createdAt'],
+      order: [
+        [literal('"news_count"'), 'DESC'],
+        ['hashtag_name', 'ASC'],
+      ],
       raw: true,
     });
 
