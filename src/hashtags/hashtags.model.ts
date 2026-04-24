@@ -1,5 +1,6 @@
 import {
   AutoIncrement,
+  BelongsToMany,
   Column,
   DataType,
   HasMany,
@@ -9,6 +10,7 @@ import {
   Unique,
 } from 'sequelize-typescript';
 import { News } from '../news/news.model';
+import { NewsHashtag } from '../news/news-hashtag.model';
 
 interface HashtagCreationAttrs {
   hashtag_name?: string;
@@ -27,6 +29,9 @@ export class Hashtag extends Model<Hashtag, HashtagCreationAttrs> {
 
   @HasMany(() => News, 'hashtag_id')
   declare blogs: News[];
+
+  @BelongsToMany(() => News, () => NewsHashtag)
+  declare news: News[];
 
   declare createdAt: Date;
   declare updatedAt: Date;

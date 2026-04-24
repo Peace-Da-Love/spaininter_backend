@@ -10,12 +10,15 @@ import { linkFormatter } from '../common/utils/link-formatter';
 import { DeleteNewsDto } from './dto/delete-news.dto';
 import { HashtagsService } from '../hashtags/hashtags.service';
 import { Hashtag } from '../hashtags/hashtags.model';
-import { col, literal } from 'sequelize';
+import { col, literal, Op, Transaction } from 'sequelize';
 import { Sequelize } from 'sequelize-typescript';
 import { UpdateNewsDto } from './dto/update-news.dto';
 import { UpdateNewsTranslationDto } from './dto/update-news-translations.dto';
 import { TelegramNewsletterService } from '../telegram-newsletter/telegram-newsletter.service';
-import { escapeSpecialCharacters, removeInvalidCharacters } from '../common/utils';
+import {
+  escapeSpecialCharacters,
+  removeInvalidCharacters,
+} from '../common/utils';
 import { Language } from '../languages/languages.model';
 import { GetNewsByIdDto } from './dto/get-news-by-id.dto';
 import { GetLatestNewsDto } from './dto/get-latest-news.dto';
@@ -23,6 +26,7 @@ import { GetHashtagNewsDto } from './dto/get-hashtag-news.dto';
 import { GoogleStorageService } from '../google-storage/google-storage.service';
 import { transliterate as tr } from 'transliteration';
 import { ReviewNewsDto } from './dto/review-news.dto';
+import { NewsHashtag } from './news-hashtag.model';
 
 @Injectable()
 export class NewsService {
@@ -30,6 +34,8 @@ export class NewsService {
     @InjectModel(News) private newsModel: typeof News,
     @InjectModel(NewsTranslations)
     private newsTranslationsModel: typeof NewsTranslations,
+    @InjectModel(NewsHashtag)
+    private newsHashtagModel: typeof NewsHashtag,
     @Inject(REQUEST) private readonly request: Request,
     private readonly languageService: LanguagesService,
     private readonly hashtagService: HashtagsService,
@@ -51,12 +57,8 @@ export class NewsService {
         [col('newsTranslations.link'), 'link'],
         [col('hashtag.hashtag_id'), 'hashtagId'],
         [col('hashtag.hashtag_name'), 'hashtagName'],
-        [
-          literal(
-            `COALESCE(hashtag.hashtag_name, '')`,
-          ),
-          'hashtagLink',
-        ],
+        [literal(`COALESCE(hashtag.hashtag_name, '')`), 'hashtagLink'],
+        [this.hashtagsJsonLiteral(), 'hashtags'],
         'views',
         'createdAt',
         'updatedAt',
@@ -117,12 +119,8 @@ export class NewsService {
         [col('newsTranslations.link'), 'link'],
         [col('hashtag.hashtag_id'), 'hashtagId'],
         [col('hashtag.hashtag_name'), 'hashtagName'],
-        [
-          literal(
-            `COALESCE(hashtag.hashtag_name, '')`,
-          ),
-          'hashtagLink',
-        ],
+        [literal(`COALESCE(hashtag.hashtag_name, '')`), 'hashtagLink'],
+        [this.hashtagsJsonLiteral(), 'hashtags'],
         'views',
         'createdAt',
         'updatedAt',
@@ -175,12 +173,8 @@ export class NewsService {
         [col('newsTranslations.title'), 'title'],
         [col('newsTranslations.link'), 'link'],
         [col('hashtag.hashtag_name'), 'hashtagName'],
-        [
-          literal(
-            `COALESCE(hashtag.hashtag_name, '')`,
-          ),
-          'hashtagLink',
-        ],
+        [literal(`COALESCE(hashtag.hashtag_name, '')`), 'hashtagLink'],
+        [this.hashtagsJsonLiteral(), 'hashtags'],
         ['poster_link', 'posterLink'],
         'createdAt',
       ],
@@ -207,7 +201,9 @@ export class NewsService {
       order: [['createdAt', 'DESC']],
     });
 
-    const newsCount = await this.newsModel.count();
+    const newsCount = await this.newsModel.count({
+      where: { status: 'approved' },
+    });
     const pageCount = Math.ceil(newsCount / limit);
     const hasNextPage = page < pageCount;
     const hasPreviousPage = page > 1;
@@ -241,19 +237,23 @@ export class NewsService {
     const news = await this.newsModel.findAll({
       limit,
       offset,
-      where: { hashtag_id: hashtagId, status: 'approved' },
+      where: {
+        status: 'approved',
+        [Op.and]: literal(`EXISTS (
+          SELECT 1
+          FROM news_hashtags AS nh_filter
+          WHERE nh_filter.news_id = "News"."news_id"
+            AND nh_filter.hashtag_id = ${hashtagId}
+        )`),
+      },
       attributes: [
         ['news_id', 'newsId'],
         'city',
         [col('newsTranslations.title'), 'title'],
         [col('newsTranslations.link'), 'link'],
         [col('hashtag.hashtag_name'), 'hashtagName'],
-        [
-          literal(
-            `COALESCE(hashtag.hashtag_name, '')`,
-          ),
-          'hashtagLink',
-        ],
+        [literal(`COALESCE(hashtag.hashtag_name, '')`), 'hashtagLink'],
+        [this.hashtagsJsonLiteral(), 'hashtags'],
         ['poster_link', 'posterLink'],
         'createdAt',
       ],
@@ -281,7 +281,15 @@ export class NewsService {
     });
 
     const newsCount = await this.newsModel.count({
-      where: { hashtag_id: hashtagId, status: 'approved' },
+      where: {
+        status: 'approved',
+        [Op.and]: literal(`EXISTS (
+          SELECT 1
+          FROM news_hashtags AS nh_filter
+          WHERE nh_filter.news_id = "News"."news_id"
+            AND nh_filter.hashtag_id = ${hashtagId}
+        )`),
+      },
     });
     const pageCount = Math.ceil(newsCount / limit);
     const hasNextPage = page < pageCount;
@@ -310,11 +318,7 @@ export class NewsService {
 
     const news = await this.newsModel.findAndCountAll({
       where: { user_id: userId },
-      attributes: [
-        'views',
-        'createdAt',
-        'status',
-      ],
+      attributes: ['views', 'createdAt', 'status'],
       include: [
         {
           as: 'newsTranslations',
@@ -328,7 +332,10 @@ export class NewsService {
     });
 
     const rows = news.rows.map((row) => {
-      const plain = row.get({ plain: true }) as unknown as Record<string, unknown>;
+      const plain = row.get({ plain: true }) as unknown as Record<
+        string,
+        unknown
+      >;
       delete plain.news_id;
       delete plain.admin_id;
       return plain;
@@ -347,7 +354,9 @@ export class NewsService {
   }
 
   public async createNews(dto: CreateNewsDto) {
-    const actor = this.request['user'] as { admin_id?: number; user_id?: number } | undefined;
+    const actor = this.request['user'] as
+      | { admin_id?: number; user_id?: number }
+      | undefined;
     const adminId = actor?.admin_id ?? null;
     const userId = actor?.user_id ?? null;
     const status: NewsStatus = adminId ? 'approved' : 'pending';
@@ -356,28 +365,8 @@ export class NewsService {
       throw new HttpException('Unauthorized', HttpStatus.UNAUTHORIZED);
     }
 
-    let hashtagId: number;
-
-    if (dto.hashtag_name) {
-      hashtagId = await this.hashtagService.findOrCreateHashtag(dto.hashtag_name);
-    } else if (dto.hashtag_id) {
-      const isHashtagIdExists = await this.hashtagService.checkHashtagIdExists(
-        dto.hashtag_id,
-      );
-
-      if (!isHashtagIdExists)
-        throw new HttpException(
-          'Hashtag does not exist',
-          HttpStatus.BAD_REQUEST,
-        );
-
-      hashtagId = dto.hashtag_id;
-    } else {
-      throw new HttpException(
-        'Either hashtag_id or hashtag_name must be provided',
-        HttpStatus.BAD_REQUEST,
-      );
-    }
+    const hashtagIds = await this.resolveHashtagIds(dto, true);
+    const primaryHashtagId = hashtagIds[0];
 
     const languageIds = dto.translations.map((t) => t.language_id);
     const isLanguageExists =
@@ -392,16 +381,21 @@ export class NewsService {
     const t = await this.sequelize.transaction();
 
     try {
-      const news = await this.newsModel.create({
-        hashtag_id: hashtagId,
-        admin_id: adminId,
-        user_id: userId,
-        status,
-        poster_link: dto.poster_link,
-        province: dto.province ?? null,
-        city: dto.city ?? null,
-        ad_link: dto.ad_link,
-      });
+      const news = await this.newsModel.create(
+        {
+          hashtag_id: primaryHashtagId,
+          admin_id: adminId,
+          user_id: userId,
+          status,
+          poster_link: dto.poster_link,
+          province: dto.province ?? null,
+          city: dto.city ?? null,
+          ad_link: dto.ad_link,
+        },
+        { transaction: t },
+      );
+
+      await this.syncNewsHashtags(news.news_id, hashtagIds, t);
 
       const translations = dto.translations.map((translation) => {
         return {
@@ -416,7 +410,9 @@ export class NewsService {
         };
       });
 
-      await this.newsTranslationsModel.bulkCreate(translations);
+      await this.newsTranslationsModel.bulkCreate(translations, {
+        transaction: t,
+      });
 
       if (status === 'approved') {
         const enLangId = await this.languageService.findLanguageByName('en');
@@ -450,7 +446,14 @@ export class NewsService {
       limit,
       offset,
       distinct: true,
-      attributes: ['news_id', 'createdAt', 'views', 'status', 'user_id', 'admin_id'],
+      attributes: [
+        'news_id',
+        'createdAt',
+        'views',
+        'status',
+        'user_id',
+        'admin_id',
+      ],
       include: [
         {
           attributes: ['title', 'link', 'language_id'],
@@ -516,26 +519,10 @@ export class NewsService {
       throw new HttpException('News not found', HttpStatus.NOT_FOUND);
     }
 
-    let hashtagId: number | undefined;
-
-    if (dto.hashtag_name) {
-      hashtagId = await this.hashtagService.findOrCreateHashtag(
-        dto.hashtag_name,
-      );
-    } else if (dto.hashtag_id) {
-      const isHashtagIdExists =
-        await this.hashtagService.checkHashtagIdExists(dto.hashtag_id);
-      if (!isHashtagIdExists) {
-        throw new HttpException(
-          'Hashtag does not exist',
-          HttpStatus.BAD_REQUEST,
-        );
-      }
-      hashtagId = dto.hashtag_id;
-    }
+    const hashtagIds = await this.resolveHashtagIds(dto, false);
 
     const updateData: Partial<News> = {};
-    if (hashtagId !== undefined) updateData.hashtag_id = hashtagId;
+    if (hashtagIds.length > 0) updateData.hashtag_id = hashtagIds[0];
     if (dto.poster_link !== undefined) updateData.poster_link = dto.poster_link;
     if (dto.province !== undefined) updateData.province = dto.province;
     if (dto.city !== undefined) updateData.city = dto.city;
@@ -549,6 +536,10 @@ export class NewsService {
           where: { news_id: newsId },
           transaction: t,
         });
+      }
+
+      if (hashtagIds.length > 0) {
+        await this.syncNewsHashtags(newsId, hashtagIds, t);
       }
 
       if (dto.translations && dto.translations.length > 0) {
@@ -579,7 +570,11 @@ export class NewsService {
                 newsId,
               )
             : existing?.link ??
-              this.normalizeTranslationLink(undefined, translation.title, newsId);
+              this.normalizeTranslationLink(
+                undefined,
+                translation.title,
+                newsId,
+              );
 
           if (existing) {
             await existing.update(
@@ -625,16 +620,16 @@ export class NewsService {
       where: { ...dto },
     });
     if (!news) throw new HttpException('News not found', HttpStatus.NOT_FOUND);
-    
+
     // Удаляем постер из Google Cloud Storage перед удалением записи
     if (news.poster_link) {
       console.log('🗑️ Удаление постера при удалении новости:', {
         newsId: dto.news_id,
-        posterLink: news.poster_link
+        posterLink: news.poster_link,
       });
       await this.googleStorageService.deleteFile(news.poster_link);
     }
-    
+
     await news.destroy();
     await this.newsTranslationsModel.destroy({
       where: { news_id: dto.news_id },
@@ -679,9 +674,9 @@ export class NewsService {
         newsId: dto.newsId,
         posterLink: dto.posterLink,
         currentPosterLink: isNewsExists.poster_link,
-        adLink: dto.adLink
+        adLink: dto.adLink,
       });
-      
+
       if (dto.adLink !== undefined) {
         newsUpdateData.ad_link = dto.adLink;
       }
@@ -690,33 +685,29 @@ export class NewsService {
         // Удаляем старый постер, если он существует и отличается от нового
         const oldPosterLink = isNewsExists.poster_link;
         const newPosterLink = dto.posterLink;
-        
-        if (
-          newPosterLink &&
-          oldPosterLink &&
-          oldPosterLink !== newPosterLink
-        ) {
+
+        if (newPosterLink && oldPosterLink && oldPosterLink !== newPosterLink) {
           console.log('🗑️ Удаление старого постера:', {
             oldPosterLink,
             newPosterLink,
-            newsId: dto.newsId
+            newsId: dto.newsId,
           });
-          
+
           // Удаляем старый постер ДО обновления записи в БД
           await this.googleStorageService.deleteFile(oldPosterLink);
         }
-        
+
         newsUpdateData.poster_link = newPosterLink;
       }
-      
+
       console.log('📝 NewsUpdateData:', newsUpdateData);
 
       // Обновляем основную таблицу новостей, если есть данные для обновления
       if (Object.keys(newsUpdateData).length > 0) {
-        await this.newsModel.update(
-          newsUpdateData,
-          { where: { news_id: dto.newsId }, transaction: t },
-        );
+        await this.newsModel.update(newsUpdateData, {
+          where: { news_id: dto.newsId },
+          transaction: t,
+        });
       }
 
       // Подготавливаем данные для обновления переводов
@@ -733,23 +724,26 @@ export class NewsService {
 
       console.log('🔍 Translation update data:', translationUpdateData);
       console.log('🔍 LanguageId:', dto.languageId);
-      console.log('🔍 Has translation data:', Object.keys(translationUpdateData).length > 0);
+      console.log(
+        '🔍 Has translation data:',
+        Object.keys(translationUpdateData).length > 0,
+      );
 
       // Обновляем переводы, если есть данные для обновления
       if (Object.keys(translationUpdateData).length > 0) {
         // Требуем languageId для обновления переводов
         if (!dto.languageId) {
-          throw new HttpException('languageId is required to update translations', HttpStatus.BAD_REQUEST);
+          throw new HttpException(
+            'languageId is required to update translations',
+            HttpStatus.BAD_REQUEST,
+          );
         }
 
         // Обновляем конкретный перевод
-        await this.newsTranslationsModel.update(
-          translationUpdateData,
-          {
-            where: { news_id: dto.newsId, language_id: dto.languageId },
-            transaction: t,
-          },
-        );
+        await this.newsTranslationsModel.update(translationUpdateData, {
+          where: { news_id: dto.newsId, language_id: dto.languageId },
+          transaction: t,
+        });
         console.log('🔍 Updated translation for languageId:', dto.languageId);
       }
 
@@ -766,11 +760,24 @@ export class NewsService {
     };
   }
 
-  public async updateNewsTranslations(newsId: number, translations: UpdateNewsTranslationDto[]) {
-    console.log('🔍 Service: updateNewsTranslations called with:', { newsId, translations });
-    
-    if (!translations || !Array.isArray(translations) || translations.length === 0) {
-      throw new HttpException('Translations array is required and must not be empty', HttpStatus.BAD_REQUEST);
+  public async updateNewsTranslations(
+    newsId: number,
+    translations: UpdateNewsTranslationDto[],
+  ) {
+    console.log('🔍 Service: updateNewsTranslations called with:', {
+      newsId,
+      translations,
+    });
+
+    if (
+      !translations ||
+      !Array.isArray(translations) ||
+      translations.length === 0
+    ) {
+      throw new HttpException(
+        'Translations array is required and must not be empty',
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     const isNewsExists = await this.newsModel.findOne({
@@ -782,13 +789,17 @@ export class NewsService {
     }
 
     // Проверяем существование языков
-    const languageIds = translations.map(t => t.languageId);
+    const languageIds = translations.map((t) => t.languageId);
     console.log('🔍 Service: languageIds to check:', languageIds);
-    
-    const isLanguageExists = await this.languageService.checkLanguageExists(languageIds);
-    
+
+    const isLanguageExists =
+      await this.languageService.checkLanguageExists(languageIds);
+
     if (!isLanguageExists) {
-      throw new HttpException('One or more languages do not exist', HttpStatus.BAD_REQUEST);
+      throw new HttpException(
+        'One or more languages do not exist',
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     const t = await this.sequelize.transaction();
@@ -816,14 +827,13 @@ export class NewsService {
         // Обновляем перевод, если есть данные для обновления
         if (Object.keys(translationUpdateData).length > 0) {
           if (existing) {
-            await this.newsTranslationsModel.update(
-              translationUpdateData,
-              {
-                where: { news_id: newsId, language_id: translation.languageId },
-                transaction: t,
-              },
+            await this.newsTranslationsModel.update(translationUpdateData, {
+              where: { news_id: newsId, language_id: translation.languageId },
+              transaction: t,
+            });
+            console.log(
+              `🔍 Updated translation for languageId: ${translation.languageId}`,
             );
-            console.log(`🔍 Updated translation for languageId: ${translation.languageId}`);
           } else {
             const title = translation.title;
             const description = translation.description;
@@ -853,7 +863,9 @@ export class NewsService {
               },
               { transaction: t },
             );
-            console.log(`🔍 Created translation for languageId: ${translation.languageId}`);
+            console.log(
+              `🔍 Created translation for languageId: ${translation.languageId}`,
+            );
           }
         }
       }
@@ -862,7 +874,10 @@ export class NewsService {
     } catch (err) {
       console.error(err);
       await t.rollback();
-      throw new HttpException('Failed to update news translations', HttpStatus.BAD_REQUEST);
+      throw new HttpException(
+        'Failed to update news translations',
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     return {
@@ -877,7 +892,10 @@ export class NewsService {
     });
 
     if (!existing) {
-      throw new HttpException('News translation not found', HttpStatus.NOT_FOUND);
+      throw new HttpException(
+        'News translation not found',
+        HttpStatus.NOT_FOUND,
+      );
     }
 
     await existing.destroy();
@@ -886,6 +904,99 @@ export class NewsService {
       statusCode: HttpStatus.OK,
       message: 'News translation deleted successfully',
     };
+  }
+
+  private hashtagsJsonLiteral() {
+    return literal(`(
+      SELECT COALESCE(
+        json_agg(
+          json_build_object(
+            'hashtagId', h.hashtag_id,
+            'hashtagName', h.hashtag_name,
+            'hashtagLink', h.hashtag_name
+          )
+          ORDER BY h.hashtag_name
+        ),
+        '[]'::json
+      )
+      FROM news_hashtags AS nh
+      INNER JOIN hashtags AS h ON h.hashtag_id = nh.hashtag_id
+      WHERE nh.news_id = "News"."news_id"
+    )`);
+  }
+
+  private async resolveHashtagIds(
+    dto: Pick<
+      CreateNewsDto | ReviewNewsDto,
+      'hashtag_id' | 'hashtag_name' | 'hashtag_ids' | 'hashtag_names'
+    >,
+    required: boolean,
+  ) {
+    const ids = dto.hashtag_ids ? [...dto.hashtag_ids] : [];
+
+    if (dto.hashtag_id) {
+      ids.unshift(dto.hashtag_id);
+    }
+
+    const names = dto.hashtag_names ? [...dto.hashtag_names] : [];
+
+    if (dto.hashtag_name) {
+      names.unshift(dto.hashtag_name);
+    }
+
+    if (!ids.length && !names.length) {
+      if (required) {
+        throw new HttpException(
+          'At least one hashtag must be provided',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      return [];
+    }
+
+    const resolvedIds: number[] = [];
+
+    for (const hashtagId of ids) {
+      const isHashtagIdExists =
+        await this.hashtagService.checkHashtagIdExists(hashtagId);
+
+      if (!isHashtagIdExists) {
+        throw new HttpException(
+          'Hashtag does not exist',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      resolvedIds.push(hashtagId);
+    }
+
+    for (const hashtagName of names) {
+      resolvedIds.push(
+        await this.hashtagService.findOrCreateHashtag(hashtagName),
+      );
+    }
+
+    return [...new Set(resolvedIds)];
+  }
+
+  private async syncNewsHashtags(
+    newsId: number,
+    hashtagIds: number[],
+    transaction: Transaction,
+  ) {
+    await this.newsHashtagModel.destroy({
+      where: { news_id: newsId },
+      transaction,
+    });
+
+    await this.newsHashtagModel.bulkCreate(
+      hashtagIds.map((hashtagId) => ({
+        news_id: newsId,
+        hashtag_id: hashtagId,
+      })),
+      { transaction },
+    );
   }
 
   private escapeJsonString(str: string) {

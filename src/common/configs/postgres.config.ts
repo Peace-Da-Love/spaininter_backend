@@ -6,6 +6,7 @@ import { Language } from '../../languages/languages.model';
 import { Hashtag } from '../../hashtags/hashtags.model';
 import { NewsTranslations } from '../../news/news-translations.model';
 import { News } from '../../news/news.model';
+import { NewsHashtag } from '../../news/news-hashtag.model';
 import { Role } from '../../role/role.model';
 import { TgChannel } from '../../telegram-newsletter/telegram-newsletter.model';
 import { City } from 'src/cities/cities.entity';
@@ -29,6 +30,7 @@ export const postgresConfig = async (
     City,
     NewsTranslations,
     News,
+    NewsHashtag,
     User,
     Role,
     TgChannel,

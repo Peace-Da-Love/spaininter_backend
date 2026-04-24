@@ -1,5 +1,6 @@
 import {
   ArrayMinSize,
+  ArrayUnique,
   IsArray,
   IsNotEmpty,
   IsNumber,
@@ -46,9 +47,30 @@ export class ReviewNewsDto {
   @IsString()
   @Length(2, 50)
   @Matches(/^[a-z0-9_]+$/, {
-    message: 'hashtag_name must contain only lowercase letters, numbers, and underscores',
+    message:
+      'hashtag_name must contain only lowercase letters, numbers, and underscores',
   })
   hashtag_name?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayUnique()
+  @IsNumber({}, { each: true })
+  hashtag_ids?: number[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayUnique()
+  @IsString({ each: true })
+  @Length(2, 50, { each: true })
+  @Matches(/^[a-z0-9_]+$/, {
+    each: true,
+    message:
+      'hashtag_names must contain only lowercase letters, numbers, and underscores',
+  })
+  hashtag_names?: string[];
 
   @IsOptional()
   @IsString()

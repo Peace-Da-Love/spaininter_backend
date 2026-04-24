@@ -4,11 +4,10 @@ import { SequelizeModule } from '@nestjs/sequelize';
 import { Hashtag } from './hashtags.model';
 import { HashtagsController } from './hashtags.controller';
 import { News } from '../news/news.model';
+import { NewsHashtag } from '../news/news-hashtag.model';
 
 @Module({
-  imports: [
-    SequelizeModule.forFeature([Hashtag, News]),
-  ],
+  imports: [SequelizeModule.forFeature([Hashtag, News, NewsHashtag])],
   providers: [HashtagsService],
   controllers: [HashtagsController],
   exports: [HashtagsService],

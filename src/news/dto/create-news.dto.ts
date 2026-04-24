@@ -6,6 +6,7 @@ import {
   IsString,
   IsOptional,
   ArrayMinSize,
+  ArrayUnique,
   Length,
   Matches,
   ValidateIf,
@@ -13,19 +14,40 @@ import {
 import { Type } from 'class-transformer';
 
 export class CreateNewsDto {
-  @ValidateIf((o) => !o.hashtag_name)
-  @IsNotEmpty({ message: 'Either hashtag_id or hashtag_name must be provided' })
+  @ValidateIf((o) => !o.hashtag_name && !hasPluralHashtagInput(o))
+  @IsNotEmpty({ message: 'At least one hashtag must be provided' })
   @IsNumber()
   hashtag_id?: number;
 
-  @ValidateIf((o) => !o.hashtag_id)
-  @IsNotEmpty({ message: 'Either hashtag_id or hashtag_name must be provided' })
+  @ValidateIf((o) => !o.hashtag_id && !hasPluralHashtagInput(o))
+  @IsNotEmpty({ message: 'At least one hashtag must be provided' })
   @IsString()
   @Length(2, 50)
   @Matches(/^[a-z0-9_]+$/, {
-    message: 'hashtag_name must contain only lowercase letters, numbers, and underscores',
+    message:
+      'hashtag_name must contain only lowercase letters, numbers, and underscores',
   })
   hashtag_name?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayUnique()
+  @IsNumber({}, { each: true })
+  hashtag_ids?: number[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayUnique()
+  @IsString({ each: true })
+  @Length(2, 50, { each: true })
+  @Matches(/^[a-z0-9_]+$/, {
+    each: true,
+    message:
+      'hashtag_names must contain only lowercase letters, numbers, and underscores',
+  })
+  hashtag_names?: string[];
 
   @IsString()
   @Length(1, 150)
@@ -79,4 +101,8 @@ export class CreateNewsTranslationDto {
   @IsOptional()
   @Length(1, 100)
   link: string;
+}
+
+function hasPluralHashtagInput(dto: CreateNewsDto) {
+  return Boolean(dto.hashtag_ids?.length || dto.hashtag_names?.length);
 }

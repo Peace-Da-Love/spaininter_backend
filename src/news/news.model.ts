@@ -1,6 +1,7 @@
 import {
   AutoIncrement,
   BelongsTo,
+  BelongsToMany,
   Column,
   DataType,
   ForeignKey,
@@ -13,6 +14,7 @@ import { Admin } from '../auth/admin.model';
 import { NewsTranslations } from './news-translations.model';
 import { Hashtag } from '../hashtags/hashtags.model';
 import { User } from '../users/user.model';
+import { NewsHashtag } from './news-hashtag.model';
 
 interface NewsCreationAttrs {
   hashtag_id: number;
@@ -94,6 +96,9 @@ export class News extends Model<News, NewsCreationAttrs> {
 
   @BelongsTo(() => Hashtag, 'hashtag_id')
   declare hashtag: Hashtag;
+
+  @BelongsToMany(() => Hashtag, () => NewsHashtag)
+  declare hashtags: Hashtag[];
 
   @HasMany(() => NewsTranslations, 'news_id')
   declare newsTranslations: NewsTranslations[];

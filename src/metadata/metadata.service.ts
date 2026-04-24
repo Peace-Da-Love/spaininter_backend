@@ -66,33 +66,37 @@ export class MetadataService {
       attributes: [
         ['hashtag_name', 'hashtag_name'],
         [
-          Sequelize.cast(
-            Sequelize.literal('CEIL(COUNT(news_id)::numeric / 8::numeric)'),
-            'integer',
-          ),
+          Sequelize.literal(`(
+            SELECT CEIL(COUNT(DISTINCT nh.news_id)::numeric / 8::numeric)::integer
+            FROM news_hashtags AS nh
+            INNER JOIN news AS n ON n.news_id = nh.news_id
+            WHERE nh.hashtag_id = "Hashtag"."hashtag_id"
+              AND n.status = 'approved'
+          )`),
           'pages_count',
         ],
         [
-          Sequelize.literal(
-            '(SELECT MAX(news.\"updatedAt\") FROM news WHERE news.hashtag_id = \"Hashtag\".\"hashtag_id\")',
-          ),
+          Sequelize.literal(`(
+            SELECT MAX(n."updatedAt")
+            FROM news_hashtags AS nh
+            INNER JOIN news AS n ON n.news_id = nh.news_id
+            WHERE nh.hashtag_id = "Hashtag"."hashtag_id"
+              AND n.status = 'approved'
+          )`),
           'last_modified',
         ],
       ],
-      include: [
-        {
-          model: News,
-          attributes: [],
-        },
-      ],
-      group: ['Hashtag.hashtag_id', 'Hashtag.hashtag_name'],
     });
 
-    const countNews = await this.newsModel.count();
+    const countNews = await this.newsModel.count({
+      where: { status: 'approved' },
+    });
     const latestNews = {
       hashtag_name: 'latest',
       pages_count: Math.ceil(countNews / 8),
-      last_modified: await this.newsModel.max('updatedAt'),
+      last_modified: await this.newsModel.max('updatedAt', {
+        where: { status: 'approved' },
+      }),
     };
 
     return {
