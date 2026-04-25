@@ -11,11 +11,11 @@ export class BotUpdate {
     const match = msg.match(/\/start (.+)/);
     const loginStart = match ? match[1] : undefined;
     if (loginStart === 'login') {
-      const HOST = this.configService.get<string>('HOST');
+      const loginUrl = this.getLoginUrl();
       await ctx.reply(
         'Are you sure you want to log in?',
         Markup.inlineKeyboard([
-          Markup.button.login('Yes', `https://${HOST}/auth`),
+          Markup.button.login('Yes', loginUrl),
           Markup.button.callback('No', `cancel_login`),
         ]),
       );
@@ -26,5 +26,15 @@ export class BotUpdate {
   @Action('cancel_login')
   async onCancelLogin(@Ctx() ctx: Context) {
     await ctx.deleteMessage();
+  }
+
+  private getLoginUrl() {
+    const host = this.configService.get<string>('HOST');
+    const normalizedHost = (host ?? '').trim().replace(/\/+$/, '');
+    const baseUrl = /^https?:\/\//i.test(normalizedHost)
+      ? normalizedHost
+      : `https://${normalizedHost}`;
+
+    return `${baseUrl}/auth`;
   }
 }

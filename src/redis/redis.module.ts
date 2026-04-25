@@ -1,0 +1,11 @@
+import { Global, Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { RedisProvider } from './redis.provider';
+
+@Global()
+@Module({
+  imports: [ConfigModule],
+  providers: [RedisProvider],
+  exports: [RedisProvider],
+})
+export class RedisModule {}

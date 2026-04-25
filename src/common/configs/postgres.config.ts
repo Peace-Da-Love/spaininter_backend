@@ -3,13 +3,14 @@ import { ConfigService } from '@nestjs/config';
 import { Admin } from '../../auth/admin.model';
 import { Token } from '../../token/token.model';
 import { Language } from '../../languages/languages.model';
-import { Category } from '../../categories/categories.model';
-import { CategoryTranslations } from '../../categories/category-translations.model';
+import { Hashtag } from '../../hashtags/hashtags.model';
 import { NewsTranslations } from '../../news/news-translations.model';
 import { News } from '../../news/news.model';
+import { NewsHashtag } from '../../news/news-hashtag.model';
 import { Role } from '../../role/role.model';
 import { TgChannel } from '../../telegram-newsletter/telegram-newsletter.model';
 import { City } from 'src/cities/cities.entity';
+import { User } from '../../users/user.model';
 
 export const postgresConfig = async (
   configService: ConfigService,
@@ -25,11 +26,12 @@ export const postgresConfig = async (
     Admin,
     Token,
     Language,
-    Category,
+    Hashtag,
     City,
-    CategoryTranslations,
     NewsTranslations,
     News,
+    NewsHashtag,
+    User,
     Role,
     TgChannel,
   ],

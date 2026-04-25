@@ -53,7 +53,10 @@ export class LanguagesService {
     // Проверяем, что все запрошенные языки существуют в БД
     for (const requestedId of languageIds) {
       if (!languageIdsFromDb.includes(requestedId)) {
-        console.log(`🔍 Language ID ${requestedId} not found in database. Available IDs:`, languageIdsFromDb);
+        console.log(
+          `🔍 Language ID ${requestedId} not found in database. Available IDs:`,
+          languageIdsFromDb,
+        );
         return false;
       }
     }

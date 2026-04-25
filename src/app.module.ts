@@ -3,11 +3,12 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { SequelizeModule } from '@nestjs/sequelize';
 import { postgresConfig } from './common/configs';
 import { AuthModule } from './auth/auth.module';
+import { UserAuthModule } from './user-auth/user-auth.module';
 import { TokenModule } from './token/token.module';
 import { BotModule } from './bot/bot.module';
 import { GoogleStorageModule } from './google-storage/google-storage.module';
 import { MulterModule } from '@nestjs/platform-express';
-import { CategoriesModule } from './categories/categories.module';
+import { HashtagsModule } from './hashtags/hashtags.module';
 import { LanguagesModule } from './languages/languages.module';
 import { NewsModule } from './news/news.module';
 import { MetadataModule } from './metadata/metadata.module';
@@ -32,10 +33,11 @@ import { CitiesModule } from './cities/cities.module';
       dest: './uploads',
     }),
     AuthModule,
+    UserAuthModule,
     TokenModule,
     BotModule,
     GoogleStorageModule,
-    CategoriesModule,
+    HashtagsModule,
     CitiesModule,
     LanguagesModule,
     NewsModule,

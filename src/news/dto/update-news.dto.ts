@@ -12,15 +12,23 @@ export class UpdateNewsDto {
   @IsNumber()
   declare newsId: number;
 
-  @ValidateIf((o) => o.title !== undefined || o.description !== undefined || o.content !== undefined)
-  @IsDefined({ message: 'languageId is required when updating translations (title, description, or content)' })
+  @ValidateIf(
+    (o) =>
+      o.title !== undefined ||
+      o.description !== undefined ||
+      o.content !== undefined,
+  )
+  @IsDefined({
+    message:
+      'languageId is required when updating translations (title, description, or content)',
+  })
   @IsNumber()
   declare languageId?: number;
 
   @IsOptional()
   @IsString()
   @IsNotEmpty()
-  @Length(1, 200)
+  @Length(1, 150)
   declare posterLink?: string;
 
   @IsOptional()

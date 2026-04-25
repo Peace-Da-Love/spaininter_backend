@@ -1,7 +1,6 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
-import { Category } from '../categories/categories.model';
-import { CategoryTranslations } from '../categories/category-translations.model';
+import { Hashtag } from '../hashtags/hashtags.model';
 import { LanguagesService } from '../languages/languages.service';
 import { NewsTranslations } from '../news/news-translations.model';
 import { News } from '../news/news.model';
@@ -12,9 +11,7 @@ import { GetNewsMetadataDto } from './dto/get-news-metadata.dto';
 @Injectable()
 export class MetadataService {
   constructor(
-    @InjectModel(Category) private categoryModel: typeof Category,
-    @InjectModel(CategoryTranslations)
-    private categoryTranslationsModel: typeof CategoryTranslations,
+    @InjectModel(Hashtag) private hashtagModel: typeof Hashtag,
     @InjectModel(News) private newsModel: typeof News,
     @InjectModel(NewsTranslations)
     private newsTranslationsModel: typeof NewsTranslations,
@@ -64,51 +61,48 @@ export class MetadataService {
     };
   }
 
-  public async getCategoryMetadata() {
-    const enLangId = await this.languagesService.findLanguageByName('en');
-
-    const newsCategories = await this.categoryModel.findAll({
+  public async getHashtagMetadata() {
+    const newsHashtags = await this.hashtagModel.findAll({
       attributes: [
-        [col('categoryTranslations.category_name'), 'category_name'],
+        ['hashtag_name', 'hashtag_name'],
         [
-          Sequelize.cast(
-            Sequelize.literal('CEIL(COUNT(news_id)::numeric / 8::numeric)'),
-            'integer',
-          ),
+          Sequelize.literal(`(
+            SELECT CEIL(COUNT(DISTINCT nh.news_id)::numeric / 8::numeric)::integer
+            FROM news_hashtags AS nh
+            INNER JOIN news AS n ON n.news_id = nh.news_id
+            WHERE nh.hashtag_id = "Hashtag"."hashtag_id"
+              AND n.status = 'approved'
+          )`),
           'pages_count',
         ],
         [
-          Sequelize.literal(
-            '(SELECT MAX(news."updatedAt") FROM news WHERE news.category_id = "Category"."category_id")',
-          ),
+          Sequelize.literal(`(
+            SELECT MAX(n."updatedAt")
+            FROM news_hashtags AS nh
+            INNER JOIN news AS n ON n.news_id = nh.news_id
+            WHERE nh.hashtag_id = "Hashtag"."hashtag_id"
+              AND n.status = 'approved'
+          )`),
           'last_modified',
         ],
       ],
-      include: [
-        {
-          model: CategoryTranslations,
-          attributes: [],
-          where: { language_id: enLangId },
-        },
-        {
-          model: News,
-          attributes: [],
-        },
-      ],
-      group: ['Category.category_id', 'categoryTranslations.translation_id'],
     });
 
-    const countNews = await this.newsModel.count();
+    const countNews = await this.newsModel.count({
+      where: { status: 'approved' },
+    });
     const latestNews = {
-      category_name: 'latest',
+      hashtag_name: 'latest',
       pages_count: Math.ceil(countNews / 8),
-      last_modified: await this.newsModel.max('updatedAt'),
+      last_modified: await this.newsModel.max('updatedAt', {
+        where: { status: 'approved' },
+      }),
     };
 
     return {
       statusCode: 200,
-      message: 'Categories have been found',
-      data: [...newsCategories, latestNews],
+      message: 'Hashtags have been found',
+      data: [...newsHashtags, latestNews],
     };
   }
 

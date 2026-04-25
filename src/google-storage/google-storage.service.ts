@@ -24,13 +24,11 @@ export class GoogleStorageService {
 
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
     const filename = `${uniqueSuffix}.webp`;
-    
+
     const imageBuffer = await sharp(file.buffer).webp().toBuffer();
-    const webpFile = this.storage
-      .bucket(this.bucketName)
-      .file(filename);
+    const webpFile = this.storage.bucket(this.bucketName).file(filename);
     const stream = webpFile.createWriteStream({
-      metadata: { 
+      metadata: {
         contentType: 'image/webp',
       },
     });
@@ -41,8 +39,8 @@ export class GoogleStorageService {
       stream.end(imageBuffer);
     });
 
-    return { 
-      url: `https://storage.googleapis.com/${this.bucketName}/${filename}` 
+    return {
+      url: `https://storage.googleapis.com/${this.bucketName}/${filename}`,
     };
   }
 
@@ -53,27 +51,27 @@ export class GoogleStorageService {
       await fs.promises.unlink(path.join(folderPath, file));
     }
   }
-  
+
   public async deleteFile(fileUrl: string): Promise<void> {
     try {
       if (!fileUrl) {
         console.warn('URL файла для удаления не указан');
         return;
       }
-      
+
       // Удаляем query-параметры и хэш, если они есть
       const urlWithoutParams = fileUrl.split('?')[0].split('#')[0];
-      
+
       // Извлекаем имя файла из URL
       // URL может быть вида: https://storage.googleapis.com/bucket-name/filename.webp
       const urlParts = urlWithoutParams.split('/');
       const filename = urlParts[urlParts.length - 1];
-      
+
       if (!filename) {
         console.warn('Не удалось извлечь имя файла из URL:', fileUrl);
         return;
       }
-      
+
       const file = this.storage.bucket(this.bucketName).file(filename);
       await file.delete();
       console.log(`Файл удален из Google Cloud Storage: ${filename}`);
@@ -82,7 +80,10 @@ export class GoogleStorageService {
       if (error.code === 404) {
         console.log(`Файл уже не существует в Google Cloud Storage`);
       } else {
-        console.warn('Не удалось удалить файл из Google Cloud Storage:', error.message);
+        console.warn(
+          'Не удалось удалить файл из Google Cloud Storage:',
+          error.message,
+        );
       }
     }
   }
