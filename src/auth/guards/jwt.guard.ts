@@ -1,6 +1,5 @@
 import { AuthGuard } from '@nestjs/passport';
 import { Injectable, UnauthorizedException } from '@nestjs/common';
-import { IPayload } from '../../token/types/IPayload';
 
 @Injectable()
 export class JwtAuthGuard extends AuthGuard('jwt') {

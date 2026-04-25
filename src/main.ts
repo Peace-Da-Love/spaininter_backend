@@ -31,9 +31,9 @@ async function bootstrap() {
   /* GLOBAL VALIDATION */
   app.useGlobalPipes(
     new ValidationPipe({
-      whitelist: true,            //  удаляет лишние поля
+      whitelist: true, //  удаляет лишние поля
       forbidNonWhitelisted: true, //  ошибка при лишних полях
-      transform: true,            //  приводит типы (timestamp → number)
+      transform: true, //  приводит типы (timestamp → number)
     }),
   );
 

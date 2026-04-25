@@ -14,7 +14,6 @@ import {
   HttpException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { Auth } from '../auth/decorators/auth.decorator';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
 import { CitiesService } from './cities.service';

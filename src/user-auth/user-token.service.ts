@@ -49,19 +49,28 @@ export class UserTokenService {
       await existing.save();
       return existing;
     }
-    return this.userTokenModel.create({ user_id: userId, refresh_token: refreshToken });
+    return this.userTokenModel.create({
+      user_id: userId,
+      refresh_token: refreshToken,
+    });
   }
 
   public async findToken(refreshToken: string) {
-    return this.userTokenModel.findOne({ where: { refresh_token: refreshToken } });
+    return this.userTokenModel.findOne({
+      where: { refresh_token: refreshToken },
+    });
   }
 
   public validateRefreshToken(refreshToken: string) {
-    return this.jwtService.verify(refreshToken, { secret: this.JWT_REFRESH_SECRET });
+    return this.jwtService.verify(refreshToken, {
+      secret: this.JWT_REFRESH_SECRET,
+    });
   }
 
   public async deleteToken(userId: number, refreshToken: string) {
-    const token = await this.userTokenModel.findOne({ where: { refresh_token: refreshToken, user_id: userId } });
+    const token = await this.userTokenModel.findOne({
+      where: { refresh_token: refreshToken, user_id: userId },
+    });
     if (!token) {
       throw new HttpException('Token not found', HttpStatus.NOT_FOUND);
     }
