@@ -27,6 +27,8 @@ import { GoogleStorageService } from '../google-storage/google-storage.service';
 import { transliterate as tr } from 'transliteration';
 import { ReviewNewsDto } from './dto/review-news.dto';
 import { NewsHashtag } from './news-hashtag.model';
+import { User } from '../users/user.model';
+import { Admin } from '../auth/admin.model';
 
 @Injectable()
 export class NewsService {
@@ -36,6 +38,8 @@ export class NewsService {
     private newsTranslationsModel: typeof NewsTranslations,
     @InjectModel(NewsHashtag)
     private newsHashtagModel: typeof NewsHashtag,
+    @InjectModel(User) private userModel: typeof User,
+    @InjectModel(Admin) private adminModel: typeof Admin,
     @Inject(REQUEST) private readonly request: Request,
     private readonly languageService: LanguagesService,
     private readonly hashtagService: HashtagsService,
@@ -308,7 +312,7 @@ export class NewsService {
     };
   }
 
-  public async getMyNewsForUser() {
+  public async getMyNewsForUser(dto: GetNewsForAdminDto) {
     const actor = this.request['user'] as { user_id?: number } | undefined;
     const userId = actor?.user_id;
 
@@ -316,9 +320,30 @@ export class NewsService {
       throw new HttpException('Unauthorized', HttpStatus.UNAUTHORIZED);
     }
 
+    const page = dto.page || 1;
+    const limit = dto.limit || 10;
+    const offset = (page - 1) * limit;
+    const user = await this.userModel.findByPk(userId, {
+      attributes: ['tg_id'],
+    });
+
+    if (!user) {
+      throw new HttpException('User not found', HttpStatus.NOT_FOUND);
+    }
+
+    const admin = await this.adminModel.findOne({
+      where: { tg_id: user.tg_id },
+      attributes: ['id'],
+    });
+    const isAdmin = Boolean(admin);
+    const where = isAdmin ? undefined : { user_id: userId };
+
     const news = await this.newsModel.findAndCountAll({
-      where: { user_id: userId },
-      attributes: ['views', 'createdAt', 'status'],
+      limit,
+      offset,
+      where,
+      distinct: true,
+      attributes: [['news_id', 'newsId'], 'views', 'createdAt', 'status'],
       include: [
         {
           as: 'newsTranslations',
@@ -328,16 +353,18 @@ export class NewsService {
         },
       ],
       order: [['createdAt', 'DESC']],
-      subQuery: false,
     });
+    const pageCount = Math.ceil(news.count / limit);
+    const hasNextPage = page < pageCount;
+    const hasPreviousPage = page > 1;
 
     const rows = news.rows.map((row) => {
       const plain = row.get({ plain: true }) as unknown as Record<
         string,
         unknown
       >;
-      delete plain.news_id;
       delete plain.admin_id;
+      delete plain.user_id;
       return plain;
     });
 
@@ -348,7 +375,12 @@ export class NewsService {
         news: {
           count: news.count,
           rows,
+          currentPage: page,
+          pageCount,
+          hasNextPage,
+          hasPreviousPage,
         },
+        isAdmin,
       },
     };
   }

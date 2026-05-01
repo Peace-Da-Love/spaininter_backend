@@ -9,10 +9,12 @@ import { LanguagesModule } from '../languages/languages.module';
 import { HashtagsModule } from '../hashtags/hashtags.module';
 import { TelegramNewsletterModule } from '../telegram-newsletter/telegram-newsletter.module';
 import { GoogleStorageModule } from '../google-storage/google-storage.module';
+import { User } from '../users/user.model';
+import { Admin } from '../auth/admin.model';
 
 @Module({
   imports: [
-    SequelizeModule.forFeature([News, NewsTranslations, NewsHashtag]),
+    SequelizeModule.forFeature([News, NewsTranslations, NewsHashtag, User, Admin]),
     LanguagesModule,
     HashtagsModule,
     TelegramNewsletterModule,

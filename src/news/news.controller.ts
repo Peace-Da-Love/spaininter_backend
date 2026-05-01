@@ -78,8 +78,8 @@ export class NewsController {
   @UseGuards(UserJwtGuard)
   @Get('my')
   @HttpCode(HttpStatus.OK)
-  public async getMyNews() {
-    return this.newsService.getMyNewsForUser();
+  public async getMyNews(@Query() dto: GetNewsForAdminDto) {
+    return this.newsService.getMyNewsForUser(dto);
   }
 
   @AnyAuth()
