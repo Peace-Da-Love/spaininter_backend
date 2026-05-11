@@ -17,6 +17,7 @@ import { LoginDto } from './dto/login.dto';
 import { DeleteAdminDto } from './dto/delete-admin.dto';
 import { GetAdminsDto } from './dto/get-admins.dto';
 import { AdminAuth } from './decorators/admin.decorator';
+import { Auth } from './decorators/auth.decorator';
 
 @Controller('auth')
 export class AuthController {
@@ -94,6 +95,13 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   public getCreators(@Query() dto: GetAdminsDto) {
     return this.authService.getCreators(dto);
+  }
+
+  @Auth()
+  @Get('/users')
+  @HttpCode(HttpStatus.OK)
+  public getUsers(@Query() dto: GetAdminsDto) {
+    return this.authService.getUsers(dto);
   }
 
   @AdminAuth()
