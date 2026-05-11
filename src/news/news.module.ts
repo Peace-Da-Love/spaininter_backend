@@ -8,9 +8,10 @@ import { NewsController } from './news.controller';
 import { LanguagesModule } from '../languages/languages.module';
 import { HashtagsModule } from '../hashtags/hashtags.module';
 import { TelegramNewsletterModule } from '../telegram-newsletter/telegram-newsletter.module';
-import { GoogleStorageModule } from '../google-storage/google-storage.module';
+import { StorageModule } from '../storage/storage.module';
 import { User } from '../users/user.model';
 import { Admin } from '../auth/admin.model';
+import { ConfigModule } from '@nestjs/config';
 
 @Module({
   imports: [
@@ -18,7 +19,8 @@ import { Admin } from '../auth/admin.model';
     LanguagesModule,
     HashtagsModule,
     TelegramNewsletterModule,
-    GoogleStorageModule,
+    StorageModule,
+    ConfigModule,
   ],
   providers: [NewsService],
   controllers: [NewsController],

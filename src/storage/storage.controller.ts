@@ -6,26 +6,20 @@ import {
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
-import { GoogleStorageService } from './google-storage.service';
+import { StorageService } from './storage.service';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { AnyAuth } from '../auth/decorators/any-auth.decorator';
+import { memoryStorage } from 'multer';
 
 @Controller('google-storage')
-export class GoogleStorageController {
-  constructor(private readonly googleStorageService: GoogleStorageService) {}
+export class StorageController {
+  constructor(private readonly storageService: StorageService) {}
 
   @AnyAuth()
   @Post('upload-file')
   @UseInterceptors(
     FileInterceptor('file', {
-      // storage: diskStorage({
-      //   destination: './uploads',
-      //   filename: (req, file, cb) => {
-      //     const uniqueSuffix =
-      //       Date.now() + '-' + Math.round(Math.random() * 1e9);
-      //     cb(null, `${uniqueSuffix}-${file.originalname}`);
-      //   },
-      // }),
+      storage: memoryStorage(),
     }),
   )
   async uploadFile(
@@ -40,6 +34,6 @@ export class GoogleStorageController {
     )
     file: Express.Multer.File,
   ) {
-    return this.googleStorageService.uploadFile(file);
+    return this.storageService.uploadFile(file);
   }
 }

@@ -15,6 +15,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { NewsService } from './news.service';
 import { CreateNewsDto } from './dto/create-news.dto';
 import { Auth } from '../auth/decorators/auth.decorator';
@@ -28,6 +29,7 @@ import { GetLatestNewsDto } from './dto/get-latest-news.dto';
 import { GetHashtagNewsDto } from './dto/get-hashtag-news.dto';
 import { UpdateNewsStatusDto } from './dto/update-news-status.dto';
 import { ReviewNewsDto } from './dto/review-news.dto';
+import { TranslateMissingNewsDto } from './dto/translate-missing-news.dto';
 import { Headers } from '@nestjs/common';
 import { UserJwtGuard } from '../user-auth/guards/user-jwt.guard';
 
@@ -121,10 +123,20 @@ export class NewsController {
   }
 
   @Auth()
+  @Post('admin/:id/translate-missing')
+  @HttpCode(HttpStatus.OK)
+  public async translateMissingNews(
+    @Param('id') id: string,
+    @Body() dto: TranslateMissingNewsDto,
+  ) {
+    return this.newsService.translateMissingNews(+id, dto);
+  }
+
+  @Auth()
   @Post(':id/photo')
   @UseInterceptors(
     FileInterceptor('photo', {
-      // Используем GoogleStorageService для обработки файла
+      storage: memoryStorage(),
     }),
   )
   @HttpCode(HttpStatus.OK)

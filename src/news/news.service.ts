@@ -1,4 +1,5 @@
 import { HttpException, HttpStatus, Inject, Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { CreateNewsDto } from './dto/create-news.dto';
 import { News, NewsStatus } from './news.model';
 import { InjectModel } from '@nestjs/sequelize';
@@ -23,12 +24,14 @@ import { Language } from '../languages/languages.model';
 import { GetNewsByIdDto } from './dto/get-news-by-id.dto';
 import { GetLatestNewsDto } from './dto/get-latest-news.dto';
 import { GetHashtagNewsDto } from './dto/get-hashtag-news.dto';
-import { GoogleStorageService } from '../google-storage/google-storage.service';
+import { StorageService } from '../storage/storage.service';
 import { transliterate as tr } from 'transliteration';
 import { ReviewNewsDto } from './dto/review-news.dto';
 import { NewsHashtag } from './news-hashtag.model';
 import { User } from '../users/user.model';
 import { Admin } from '../auth/admin.model';
+import OpenAI from 'openai';
+import { TranslateMissingNewsDto } from './dto/translate-missing-news.dto';
 
 @Injectable()
 export class NewsService {
@@ -44,9 +47,144 @@ export class NewsService {
     private readonly languageService: LanguagesService,
     private readonly hashtagService: HashtagsService,
     private readonly telegramNewsletterService: TelegramNewsletterService,
-    private readonly googleStorageService: GoogleStorageService,
+    private readonly storageService: StorageService,
+    private readonly configService: ConfigService,
     private sequelize: Sequelize,
   ) {}
+
+  public async translateMissingNews(
+    newsId: number,
+    dto: TranslateMissingNewsDto,
+  ) {
+    if (!Number.isInteger(newsId) || newsId <= 0) {
+      throw new HttpException('Invalid news id', HttpStatus.BAD_REQUEST);
+    }
+
+    const news = await this.newsModel.findOne({
+      where: { news_id: newsId },
+      attributes: ['news_id'],
+    });
+
+    if (!news) {
+      throw new HttpException('News not found', HttpStatus.NOT_FOUND);
+    }
+
+    const apiKey = this.configService.get<string>('OPENAI_API_KEY');
+    if (!apiKey) {
+      throw new HttpException(
+        'OpenAI API key is not configured',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    const requestedLanguageIds = [
+      dto.source.language_id,
+      ...dto.targets.map((target) => target.language_id),
+    ];
+    const languagesExist =
+      await this.languageService.checkLanguageExists(requestedLanguageIds);
+
+    if (!languagesExist) {
+      throw new HttpException('Invalid language id', HttpStatus.BAD_REQUEST);
+    }
+
+    const model =
+      this.configService.get<string>('OPENAI_TRANSLATION_MODEL') ??
+      'gpt-5-mini';
+    const baseURL =
+      this.configService.get<string>('OPENAI_BASE_URL') ??
+      (model.startsWith('deepseek') ? 'https://api.deepseek.com' : undefined);
+    const openai = new OpenAI({ apiKey, baseURL });
+
+    try {
+      const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+        {
+          role: 'system',
+          content:
+            'You are a professional news translator. Translate accurately, preserve markdown structure, preserve line breaks, do not translate URLs, do not add facts, and keep the same editorial tone. Return only valid JSON, without markdown fences or extra text.',
+        },
+        {
+          role: 'user',
+          content:
+            'Return JSON with this exact shape: {"translations":[{"language_id":number,"title":string,"description":string,"content":string}]}.\n' +
+            'Translate every target language. For each target, only translate the requested fields, but still include title, description, and content keys in the JSON object.\n' +
+            'Constraints: title maximum 100 characters, description maximum 255 characters, content maximum 50000 characters. Preserve markdown syntax in content and translate only human-readable text.\n\n' +
+            JSON.stringify({
+              source: dto.source,
+              targets: dto.targets,
+            }),
+        },
+      ];
+
+      let response: OpenAI.Chat.Completions.ChatCompletion;
+      try {
+        response = await openai.chat.completions.create({
+          model,
+          response_format: { type: 'json_object' },
+          messages,
+        });
+      } catch (error) {
+        response = await openai.chat.completions.create({
+          model,
+          messages,
+        });
+      }
+
+      const content = response.choices[0]?.message?.content;
+      if (!content) {
+        throw new Error('Translation model returned an empty response');
+      }
+
+      const parsed = this.parseTranslationJson(content) as {
+        translations?: Array<{
+          language_id: number;
+          title: string;
+          description: string;
+          content: string;
+        }>;
+      };
+
+      const targetLanguageIds = new Set(
+        dto.targets.map((target) => target.language_id),
+      );
+      const translations = (parsed.translations ?? []).filter((translation) =>
+        targetLanguageIds.has(translation.language_id),
+      );
+
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'Missing translations generated successfully',
+        data: { translations },
+      };
+    } catch (error) {
+      console.error('Failed to translate missing news fields', error);
+      throw new HttpException(
+        'Failed to translate missing news fields',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
+  private parseTranslationJson(content: string) {
+    const trimmed = content.trim();
+
+    try {
+      return JSON.parse(trimmed);
+    } catch (error) {
+      const fencedJson = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+      if (fencedJson?.[1]) {
+        return JSON.parse(fencedJson[1]);
+      }
+
+      const firstBrace = trimmed.indexOf('{');
+      const lastBrace = trimmed.lastIndexOf('}');
+      if (firstBrace >= 0 && lastBrace > firstBrace) {
+        return JSON.parse(trimmed.slice(firstBrace, lastBrace + 1));
+      }
+
+      throw error;
+    }
+  }
 
   public async getNewsByIdForSite(dto: GetNewsByIdDto, languageCode?: string) {
     const id = Number(dto.id);
@@ -659,7 +797,7 @@ export class NewsService {
         newsId: dto.news_id,
         posterLink: news.poster_link,
       });
-      await this.googleStorageService.deleteFile(news.poster_link);
+      await this.storageService.deleteFile(news.poster_link);
     }
 
     await news.destroy();
@@ -673,7 +811,7 @@ export class NewsService {
   }
 
   public async uploadPosterFile(file: Express.Multer.File) {
-    return this.googleStorageService.uploadFile(file);
+    return this.storageService.uploadFile(file);
   }
 
   public async updateNews(dto: UpdateNewsDto) {
@@ -726,7 +864,7 @@ export class NewsService {
           });
 
           // Удаляем старый постер ДО обновления записи в БД
-          await this.googleStorageService.deleteFile(oldPosterLink);
+          await this.storageService.deleteFile(oldPosterLink);
         }
 
         newsUpdateData.poster_link = newPosterLink;
