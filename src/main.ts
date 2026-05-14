@@ -6,17 +6,37 @@ import * as bodyParser from 'body-parser';
 import * as express from 'express';
 import { join } from 'path';
 
+const normalizeOrigin = (origin: string) => origin.trim().replace(/\/$/, '');
+
 async function bootstrap() {
   const logger = new Logger('bootstrap');
 
   const PORT = process.env.PORT || 3000;
-  const CLIENT_URLS = process.env.CLIENT_URLS || 'http://localhost:5173';
+  const DEFAULT_CLIENT_URLS = [
+    'http://localhost:3000',
+    'http://localhost:5173',
+    'https://spaininter.com',
+    'https://crm.spaininter.com',
+  ];
+  const CLIENT_URLS = new Set([
+    ...DEFAULT_CLIENT_URLS,
+    ...(process.env.CLIENT_URLS ?? '').split(/[;,]/),
+  ]
+    .filter(Boolean)
+    .map(normalizeOrigin));
 
   const app = await NestFactory.create(AppModule);
 
   /* CORS */
   app.enableCors({
-    origin: CLIENT_URLS.split(';'),
+    origin: (origin, callback) => {
+      if (!origin || CLIENT_URLS.has(normalizeOrigin(origin))) {
+        callback(null, true);
+        return;
+      }
+
+      callback(null, false);
+    },
     credentials: true,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
   });
