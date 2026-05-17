@@ -19,6 +19,7 @@ import { memoryStorage } from 'multer';
 import { NewsService } from './news.service';
 import { CreateNewsDto } from './dto/create-news.dto';
 import { Auth } from '../auth/decorators/auth.decorator';
+import { AdminAuth } from '../auth/decorators/admin.decorator';
 import { AnyAuth } from '../auth/decorators/any-auth.decorator';
 import { GetNewsForAdminDto } from './dto/get-news-for-admin.dto';
 import { DeleteNewsDto } from './dto/delete-news.dto';
@@ -98,7 +99,7 @@ export class NewsController {
     return this.newsService.getNewsForAdmin(dto);
   }
 
-  @Auth()
+  @AdminAuth()
   @Delete('delete')
   @HttpCode(HttpStatus.OK)
   public async deleteNews(@Query() dto: DeleteNewsDto) {
