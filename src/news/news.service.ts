@@ -703,15 +703,7 @@ export class NewsService {
       });
 
       if (status === 'approved') {
-        const enLangId = await this.languageService.findLanguageByName('en');
-        const enTranslation = translations.find(
-          (t) => t.language_id === enLangId,
-        );
-        const enTitle = escapeSpecialCharacters(enTranslation.title);
-        const enLink = enTranslation.link;
-        const utmLink = `https://spaininter.com/en/news/${enLink}?utm_source=telegram&utm_medium=article`;
-        const tgMessage = `[${enTitle}](${utmLink})`;
-        await this.telegramNewsletterService.sendNewsletter(tgMessage);
+        await this.sendApprovedNewsToTelegram(news.news_id, translations);
       }
       await t.commit();
     } catch (err) {
@@ -775,6 +767,7 @@ export class NewsService {
       throw new HttpException('News not found', HttpStatus.NOT_FOUND);
     }
 
+    const previousStatus = news.status;
     const updateData: Partial<News> = { status };
 
     if (status === 'approved') {
@@ -784,6 +777,10 @@ export class NewsService {
     }
 
     await this.newsModel.update(updateData, { where: { news_id: newsId } });
+
+    if (status === 'approved' && previousStatus !== 'approved') {
+      await this.sendApprovedNewsToTelegram(newsId);
+    }
 
     return {
       statusCode: HttpStatus.OK,
@@ -1285,6 +1282,33 @@ export class NewsService {
       })),
       { transaction },
     );
+  }
+
+  private async sendApprovedNewsToTelegram(
+    newsId: number,
+    translations?: { language_id: number; title: string; link: string }[],
+  ) {
+    const enLangId = await this.languageService.findLanguageByName('en');
+    const enTranslation =
+      translations?.find((translation) => translation.language_id === enLangId) ??
+      (await this.newsTranslationsModel.findOne({
+        where: { news_id: newsId, language_id: enLangId },
+        attributes: ['title', 'link'],
+      }));
+
+    if (!enTranslation) {
+      throw new HttpException(
+        'English translation not found',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const enTitle = escapeSpecialCharacters(enTranslation.title);
+    const enLink = enTranslation.link;
+    const utmLink = `https://spaininter.com/en/news/${enLink}?utm_source=telegram&utm_medium=article`;
+    const tgMessage = `[${enTitle}](${utmLink})`;
+
+    await this.telegramNewsletterService.sendNewsletter(tgMessage);
   }
 
   private escapeJsonString(str: string) {
