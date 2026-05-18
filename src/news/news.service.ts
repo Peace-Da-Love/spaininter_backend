@@ -46,35 +46,9 @@ type TranslationResult = {
   content: string;
 };
 
-type TranslationModelResponse = {
-  translations: TranslationResult[];
-};
-
 @Injectable()
 export class NewsService {
   private readonly logger = new Logger(NewsService.name);
-
-  private readonly translationResponseSchema = {
-    type: 'object',
-    additionalProperties: false,
-    properties: {
-      translations: {
-        type: 'array',
-        items: {
-          type: 'object',
-          additionalProperties: false,
-          properties: {
-            language_id: { type: 'number' },
-            title: { type: 'string' },
-            description: { type: 'string' },
-            content: { type: 'string' },
-          },
-          required: ['language_id', 'title', 'description', 'content'],
-        },
-      },
-    },
-    required: ['translations'],
-  } as const;
 
   constructor(
     @InjectModel(News) private newsModel: typeof News,
@@ -146,68 +120,32 @@ export class NewsService {
     const openai = new OpenAI({ apiKey, baseURL });
 
     try {
-      const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-        {
-          role: 'system',
-          content:
-            'You are a professional news translator. Translate accurately, preserve markdown structure, preserve line breaks, do not translate URLs, do not add facts, and keep the same editorial tone. Return only JSON that matches the requested schema.',
-        },
-        {
-          role: 'user',
-          content:
-            'Return JSON with this exact shape: {"translations":[{"language_id":number,"title":string,"description":string,"content":string}]}.\n' +
-            'Translate every target language. For each target, translate only the requested fields. Still include title, description, and content keys in every object; for fields that were not requested, return an empty string.\n' +
-            'Constraints: title maximum 100 characters, description maximum 255 characters, content maximum 50000 characters. Preserve markdown syntax in content and translate only human-readable text.\n\n' +
-            JSON.stringify({
-              source: dto.source,
-              targets: dto.targets,
-            }),
-        },
-      ];
+      const translations = await Promise.all(
+        dto.targets.map(async (target) => {
+          const translation: TranslationResult = {
+            language_id: target.language_id,
+            title: '',
+            description: '',
+            content: '',
+          };
 
-      const response = await this.createTranslationCompletion(
-        openai,
-        model,
-        messages,
-      );
+          for (const field of target.fields) {
+            const sourceText = dto.source[field];
+            translation[field] = await this.translateNewsField(
+              openai,
+              model,
+              dto.source.language_code,
+              target.language_code,
+              field,
+              sourceText,
+            );
+          }
 
-      const content = response.choices[0]?.message?.content;
-      if (!content) {
-        throw new Error('Translation model returned an empty response');
-      }
-
-      let parsed: TranslationModelResponse;
-      try {
-        parsed = this.parseTranslationJson(content);
-      } catch (parseError) {
-        this.logInvalidTranslationJson(content, parseError);
-        const repairedContent = await this.repairTranslationJson(
-          openai,
-          model,
-          content,
-        );
-        parsed = this.parseTranslationJson(repairedContent);
-      }
-
-      const translations = this.normalizeTranslationResponse(parsed, dto);
-
-      if (translations.length !== dto.targets.length) {
-        throw new Error(
-          `Translation model returned ${translations.length} translations for ${dto.targets.length} targets`,
-        );
-      }
-
-      const invalidTarget = translations.find((translation) =>
-        dto.targets.some((target) => {
-          if (target.language_id !== translation.language_id) return false;
-          return target.fields.some((field) => !translation[field]?.trim());
+          return translation;
         }),
       );
-      if (invalidTarget) {
-        throw new Error(
-          `Translation model returned empty requested fields for language_id=${invalidTarget.language_id}`,
-        );
-      }
+
+      this.validateGeneratedTranslations(translations, dto);
 
       return {
         statusCode: HttpStatus.OK,
@@ -223,168 +161,147 @@ export class NewsService {
     }
   }
 
-  private async createTranslationCompletion(
+  private async translateNewsField(
     openai: OpenAI,
     model: string,
-    messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+    sourceLanguageCode: string,
+    targetLanguageCode: string,
+    field: 'title' | 'description' | 'content',
+    sourceText: string,
   ) {
-    const attempts: Array<{
-      label: string;
-      response_format?: OpenAI.Chat.Completions.ChatCompletionCreateParams['response_format'];
-    }> = [
-      {
-        label: 'json_schema',
-        response_format: {
-          type: 'json_schema',
-          json_schema: {
-            name: 'news_translations',
-            strict: true,
-            schema: this.translationResponseSchema,
-          },
-        } as OpenAI.Chat.Completions.ChatCompletionCreateParams['response_format'],
-      },
-      {
-        label: 'json_object',
-        response_format: { type: 'json_object' },
-      },
-      {
-        label: 'plain_json_prompt',
-      },
-    ];
+    const protectedInput =
+      field === 'content'
+        ? this.protectMarkdownEmbeds(sourceText)
+        : { text: sourceText, placeholders: new Map<string, string>() };
 
-    let lastError: unknown;
-
-    for (const attempt of attempts) {
-      try {
-        return await openai.chat.completions.create({
-          model,
-          messages,
-          ...(attempt.response_format
-            ? { response_format: attempt.response_format }
-            : {}),
-        });
-      } catch (error) {
-        lastError = error;
-        this.logger.warn(
-          `OpenAI translation request failed with ${attempt.label}; trying fallback if available`,
-        );
-      }
-    }
-
-    throw lastError;
-  }
-
-  private async repairTranslationJson(
-    openai: OpenAI,
-    model: string,
-    invalidJson: string,
-  ) {
-    const response = await this.createTranslationCompletion(openai, model, [
+    const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
       {
         role: 'system',
         content:
-          'You repair invalid JSON. Return only valid JSON matching the provided schema. Do not translate, summarize, or alter text values except to make JSON escaping valid.',
+          'You are a professional news translator. Translate accurately, preserve line breaks, preserve markdown syntax, do not add facts, and keep the same editorial tone. Return only the translated text, without JSON, markdown fences, comments, labels, or explanations.',
       },
       {
         role: 'user',
-        content: invalidJson,
+        content:
+          `Translate this ${field} from ${sourceLanguageCode} to ${targetLanguageCode}.\n` +
+          this.getFieldTranslationRules(field) +
+          '\n\nText:\n' +
+          protectedInput.text,
       },
-    ]);
+    ];
+
+    const response = await openai.chat.completions.create({
+      model,
+      messages,
+    });
 
     const content = response.choices[0]?.message?.content;
     if (!content) {
-      throw new Error('Translation JSON repair returned an empty response');
+      throw new Error(`Translation model returned an empty ${field}`);
     }
 
-    return content;
+    const translatedText = this.stripModelFormatting(content);
+    const restoredText = this.restoreMarkdownEmbeds(
+      translatedText,
+      protectedInput.placeholders,
+    );
+
+    return this.limitTranslatedField(field, restoredText);
   }
 
-  private parseTranslationJson(content: string): TranslationModelResponse {
-    const trimmed = content.trim();
-
-    try {
-      return JSON.parse(trimmed);
-    } catch (error) {
-      const fencedJson = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
-      if (fencedJson?.[1]) {
-        return JSON.parse(fencedJson[1]);
-      }
-
-      const firstBrace = trimmed.indexOf('{');
-      const lastBrace = trimmed.lastIndexOf('}');
-      if (firstBrace >= 0 && lastBrace > firstBrace) {
-        return JSON.parse(trimmed.slice(firstBrace, lastBrace + 1));
-      }
-
-      throw error;
+  private getFieldTranslationRules(field: 'title' | 'description' | 'content') {
+    if (field === 'title') {
+      return 'Rules: keep the result under 100 characters.';
     }
+
+    if (field === 'description') {
+      return 'Rules: keep the result under 255 characters.';
+    }
+
+    return (
+      'Rules: preserve headings, lists, paragraphs, blank lines, markdown formatting, and placeholder tokens exactly. ' +
+      'Do not translate or modify tokens like __SPAININTER_MEDIA_0__. ' +
+      'Do not translate URLs, phone numbers, JSX tags, image markdown, video embeds, or HTML entities.'
+    );
   }
 
-  private normalizeTranslationResponse(
-    parsed: TranslationModelResponse,
+  private protectMarkdownEmbeds(markdown: string) {
+    const placeholders = new Map<string, string>();
+    let protectedText = markdown;
+    let index = 0;
+
+    const replace = (pattern: RegExp) => {
+      protectedText = protectedText.replace(pattern, (match: string) => {
+        const placeholder = `__SPAININTER_MEDIA_${index}__`;
+        index += 1;
+        placeholders.set(placeholder, match);
+        return placeholder;
+      });
+    };
+
+    replace(/<YouTube\b[^>]*\/?>/g);
+    replace(/<TikTok\b[^>]*\/?>/g);
+    replace(/!\[[^\]]*]\([^\n]*?\)/g);
+
+    return { text: protectedText, placeholders };
+  }
+
+  private restoreMarkdownEmbeds(
+    translatedText: string,
+    placeholders: Map<string, string>,
+  ) {
+    let restoredText = translatedText;
+
+    for (const [placeholder, original] of placeholders) {
+      const placeholderPattern = new RegExp(
+        placeholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+        'g',
+      );
+      restoredText = restoredText.replace(placeholderPattern, original);
+    }
+
+    return restoredText;
+  }
+
+  private stripModelFormatting(text: string) {
+    const trimmed = text.trim();
+    const fenced = trimmed.match(
+      /^```(?:markdown|md|text)?\s*([\s\S]*?)\s*```$/i,
+    );
+    return fenced?.[1]?.trim() ?? trimmed;
+  }
+
+  private limitTranslatedField(
+    field: 'title' | 'description' | 'content',
+    value: string,
+  ) {
+    if (field === 'title') return value.slice(0, 100);
+    if (field === 'description') return value.slice(0, 255);
+    return value.slice(0, 50000);
+  }
+
+  private validateGeneratedTranslations(
+    translations: TranslationResult[],
     dto: TranslateMissingNewsDto,
   ) {
-    if (!parsed || !Array.isArray(parsed.translations)) {
-      throw new Error('Translation model returned JSON without translations[]');
+    if (translations.length !== dto.targets.length) {
+      throw new Error(
+        `Translation model returned ${translations.length} translations for ${dto.targets.length} targets`,
+      );
     }
 
-    const translationsByLanguageId = new Map<number, TranslationResult>();
-    for (const translation of parsed.translations) {
-      if (
-        !translation ||
-        typeof translation.language_id !== 'number' ||
-        typeof translation.title !== 'string' ||
-        typeof translation.description !== 'string' ||
-        typeof translation.content !== 'string'
-      ) {
-        throw new Error('Translation model returned invalid translation item');
-      }
-
-      translationsByLanguageId.set(translation.language_id, {
-        language_id: translation.language_id,
-        title: translation.title.slice(0, 100),
-        description: translation.description.slice(0, 255),
-        content: translation.content.slice(0, 50000),
-      });
-    }
-
-    return dto.targets.map((target) => {
-      const translation = translationsByLanguageId.get(target.language_id);
-      if (!translation) {
-        throw new Error(
-          `Translation model did not return language_id=${target.language_id}`,
-        );
-      }
-
-      return translation;
-    });
-  }
-
-  private logInvalidTranslationJson(content: string, error: unknown) {
-    const position = this.getJsonParseErrorPosition(error);
-    const contextStart =
-      typeof position === 'number' ? Math.max(position - 500, 0) : 0;
-    const contextEnd =
-      typeof position === 'number'
-        ? Math.min(position + 500, content.length)
-        : Math.min(content.length, 1000);
-
-    this.logger.error(
-      `Translation model returned invalid JSON${
-        typeof position === 'number' ? ` at position ${position}` : ''
-      }`,
+    const invalidTarget = translations.find((translation) =>
+      dto.targets.some((target) => {
+        if (target.language_id !== translation.language_id) return false;
+        return target.fields.some((field) => !translation[field]?.trim());
+      }),
     );
-    this.logger.error(content.slice(contextStart, contextEnd));
-  }
 
-  private getJsonParseErrorPosition(error: unknown) {
-    if (!(error instanceof SyntaxError)) return null;
-
-    const match = error.message.match(/position\s+(\d+)/i);
-    if (!match) return null;
-
-    const position = Number(match[1]);
-    return Number.isFinite(position) ? position : null;
+    if (invalidTarget) {
+      throw new Error(
+        `Translation model returned empty requested fields for language_id=${invalidTarget.language_id}`,
+      );
+    }
   }
 
   public async getNewsByIdForSite(dto: GetNewsByIdDto, languageCode?: string) {
