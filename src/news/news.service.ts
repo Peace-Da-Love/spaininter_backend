@@ -1,4 +1,10 @@
-import { HttpException, HttpStatus, Inject, Injectable } from '@nestjs/common';
+import {
+  HttpException,
+  HttpStatus,
+  Inject,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { CreateNewsDto } from './dto/create-news.dto';
 import { News, NewsStatus } from './news.model';
@@ -33,8 +39,43 @@ import { Admin } from '../auth/admin.model';
 import OpenAI from 'openai';
 import { TranslateMissingNewsDto } from './dto/translate-missing-news.dto';
 
+type TranslationResult = {
+  language_id: number;
+  title: string;
+  description: string;
+  content: string;
+};
+
+type TranslationModelResponse = {
+  translations: TranslationResult[];
+};
+
 @Injectable()
 export class NewsService {
+  private readonly logger = new Logger(NewsService.name);
+
+  private readonly translationResponseSchema = {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      translations: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            language_id: { type: 'number' },
+            title: { type: 'string' },
+            description: { type: 'string' },
+            content: { type: 'string' },
+          },
+          required: ['language_id', 'title', 'description', 'content'],
+        },
+      },
+    },
+    required: ['translations'],
+  } as const;
+
   constructor(
     @InjectModel(News) private newsModel: typeof News,
     @InjectModel(NewsTranslations)
@@ -69,6 +110,14 @@ export class NewsService {
       throw new HttpException('News not found', HttpStatus.NOT_FOUND);
     }
 
+    return this.generateMissingNewsTranslations(dto);
+  }
+
+  public async translateMissingDraftNews(dto: TranslateMissingNewsDto) {
+    return this.generateMissingNewsTranslations(dto);
+  }
+
+  private async generateMissingNewsTranslations(dto: TranslateMissingNewsDto) {
     const apiKey = this.configService.get<string>('OPENAI_API_KEY');
     if (!apiKey) {
       throw new HttpException(
@@ -101,13 +150,13 @@ export class NewsService {
         {
           role: 'system',
           content:
-            'You are a professional news translator. Translate accurately, preserve markdown structure, preserve line breaks, do not translate URLs, do not add facts, and keep the same editorial tone. Return only valid JSON, without markdown fences or extra text.',
+            'You are a professional news translator. Translate accurately, preserve markdown structure, preserve line breaks, do not translate URLs, do not add facts, and keep the same editorial tone. Return only JSON that matches the requested schema.',
         },
         {
           role: 'user',
           content:
             'Return JSON with this exact shape: {"translations":[{"language_id":number,"title":string,"description":string,"content":string}]}.\n' +
-            'Translate every target language. For each target, only translate the requested fields, but still include title, description, and content keys in the JSON object.\n' +
+            'Translate every target language. For each target, translate only the requested fields. Still include title, description, and content keys in every object; for fields that were not requested, return an empty string.\n' +
             'Constraints: title maximum 100 characters, description maximum 255 characters, content maximum 50000 characters. Preserve markdown syntax in content and translate only human-readable text.\n\n' +
             JSON.stringify({
               source: dto.source,
@@ -116,40 +165,49 @@ export class NewsService {
         },
       ];
 
-      let response: OpenAI.Chat.Completions.ChatCompletion;
-      try {
-        response = await openai.chat.completions.create({
-          model,
-          response_format: { type: 'json_object' },
-          messages,
-        });
-      } catch (error) {
-        response = await openai.chat.completions.create({
-          model,
-          messages,
-        });
-      }
+      const response = await this.createTranslationCompletion(
+        openai,
+        model,
+        messages,
+      );
 
       const content = response.choices[0]?.message?.content;
       if (!content) {
         throw new Error('Translation model returned an empty response');
       }
 
-      const parsed = this.parseTranslationJson(content) as {
-        translations?: Array<{
-          language_id: number;
-          title: string;
-          description: string;
-          content: string;
-        }>;
-      };
+      let parsed: TranslationModelResponse;
+      try {
+        parsed = this.parseTranslationJson(content);
+      } catch (parseError) {
+        this.logInvalidTranslationJson(content, parseError);
+        const repairedContent = await this.repairTranslationJson(
+          openai,
+          model,
+          content,
+        );
+        parsed = this.parseTranslationJson(repairedContent);
+      }
 
-      const targetLanguageIds = new Set(
-        dto.targets.map((target) => target.language_id),
+      const translations = this.normalizeTranslationResponse(parsed, dto);
+
+      if (translations.length !== dto.targets.length) {
+        throw new Error(
+          `Translation model returned ${translations.length} translations for ${dto.targets.length} targets`,
+        );
+      }
+
+      const invalidTarget = translations.find((translation) =>
+        dto.targets.some((target) => {
+          if (target.language_id !== translation.language_id) return false;
+          return target.fields.some((field) => !translation[field]?.trim());
+        }),
       );
-      const translations = (parsed.translations ?? []).filter((translation) =>
-        targetLanguageIds.has(translation.language_id),
-      );
+      if (invalidTarget) {
+        throw new Error(
+          `Translation model returned empty requested fields for language_id=${invalidTarget.language_id}`,
+        );
+      }
 
       return {
         statusCode: HttpStatus.OK,
@@ -157,15 +215,91 @@ export class NewsService {
         data: { translations },
       };
     } catch (error) {
-      console.error('Failed to translate missing news fields', error);
+      this.logger.error('Failed to translate missing news fields', error);
       throw new HttpException(
         'Failed to translate missing news fields',
-        HttpStatus.BAD_REQUEST,
+        HttpStatus.BAD_GATEWAY,
       );
     }
   }
 
-  private parseTranslationJson(content: string) {
+  private async createTranslationCompletion(
+    openai: OpenAI,
+    model: string,
+    messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+  ) {
+    const attempts: Array<{
+      label: string;
+      response_format?: OpenAI.Chat.Completions.ChatCompletionCreateParams['response_format'];
+    }> = [
+      {
+        label: 'json_schema',
+        response_format: {
+          type: 'json_schema',
+          json_schema: {
+            name: 'news_translations',
+            strict: true,
+            schema: this.translationResponseSchema,
+          },
+        } as OpenAI.Chat.Completions.ChatCompletionCreateParams['response_format'],
+      },
+      {
+        label: 'json_object',
+        response_format: { type: 'json_object' },
+      },
+      {
+        label: 'plain_json_prompt',
+      },
+    ];
+
+    let lastError: unknown;
+
+    for (const attempt of attempts) {
+      try {
+        return await openai.chat.completions.create({
+          model,
+          messages,
+          ...(attempt.response_format
+            ? { response_format: attempt.response_format }
+            : {}),
+        });
+      } catch (error) {
+        lastError = error;
+        this.logger.warn(
+          `OpenAI translation request failed with ${attempt.label}; trying fallback if available`,
+        );
+      }
+    }
+
+    throw lastError;
+  }
+
+  private async repairTranslationJson(
+    openai: OpenAI,
+    model: string,
+    invalidJson: string,
+  ) {
+    const response = await this.createTranslationCompletion(openai, model, [
+      {
+        role: 'system',
+        content:
+          'You repair invalid JSON. Return only valid JSON matching the provided schema. Do not translate, summarize, or alter text values except to make JSON escaping valid.',
+      },
+      {
+        role: 'user',
+        content: invalidJson,
+      },
+    ]);
+
+    const content = response.choices[0]?.message?.content;
+    if (!content) {
+      throw new Error('Translation JSON repair returned an empty response');
+    }
+
+    return content;
+  }
+
+  private parseTranslationJson(content: string): TranslationModelResponse {
     const trimmed = content.trim();
 
     try {
@@ -184,6 +318,73 @@ export class NewsService {
 
       throw error;
     }
+  }
+
+  private normalizeTranslationResponse(
+    parsed: TranslationModelResponse,
+    dto: TranslateMissingNewsDto,
+  ) {
+    if (!parsed || !Array.isArray(parsed.translations)) {
+      throw new Error('Translation model returned JSON without translations[]');
+    }
+
+    const translationsByLanguageId = new Map<number, TranslationResult>();
+    for (const translation of parsed.translations) {
+      if (
+        !translation ||
+        typeof translation.language_id !== 'number' ||
+        typeof translation.title !== 'string' ||
+        typeof translation.description !== 'string' ||
+        typeof translation.content !== 'string'
+      ) {
+        throw new Error('Translation model returned invalid translation item');
+      }
+
+      translationsByLanguageId.set(translation.language_id, {
+        language_id: translation.language_id,
+        title: translation.title.slice(0, 100),
+        description: translation.description.slice(0, 255),
+        content: translation.content.slice(0, 50000),
+      });
+    }
+
+    return dto.targets.map((target) => {
+      const translation = translationsByLanguageId.get(target.language_id);
+      if (!translation) {
+        throw new Error(
+          `Translation model did not return language_id=${target.language_id}`,
+        );
+      }
+
+      return translation;
+    });
+  }
+
+  private logInvalidTranslationJson(content: string, error: unknown) {
+    const position = this.getJsonParseErrorPosition(error);
+    const contextStart =
+      typeof position === 'number' ? Math.max(position - 500, 0) : 0;
+    const contextEnd =
+      typeof position === 'number'
+        ? Math.min(position + 500, content.length)
+        : Math.min(content.length, 1000);
+
+    this.logger.error(
+      `Translation model returned invalid JSON${
+        typeof position === 'number' ? ` at position ${position}` : ''
+      }`,
+    );
+    this.logger.error(content.slice(contextStart, contextEnd));
+  }
+
+  private getJsonParseErrorPosition(error: unknown) {
+    if (!(error instanceof SyntaxError)) return null;
+
+    const match = error.message.match(/position\s+(\d+)/i);
+    if (!match) return null;
+
+    const position = Number(match[1]);
+    return Number.isFinite(position) ? position : null;
   }
 
   public async getNewsByIdForSite(dto: GetNewsByIdDto, languageCode?: string) {

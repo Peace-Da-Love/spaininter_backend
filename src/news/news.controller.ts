@@ -124,6 +124,13 @@ export class NewsController {
   }
 
   @Auth()
+  @Post('admin/translate-missing')
+  @HttpCode(HttpStatus.OK)
+  public async translateMissingDraftNews(@Body() dto: TranslateMissingNewsDto) {
+    return this.newsService.translateMissingDraftNews(dto);
+  }
+
+  @Auth()
   @Post('admin/:id/translate-missing')
   @HttpCode(HttpStatus.OK)
   public async translateMissingNews(

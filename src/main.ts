@@ -18,16 +18,44 @@ async function bootstrap() {
     'https://spaininter.com',
     'https://crm.spaininter.com',
   ];
-  const CLIENT_URLS = new Set([
-    ...DEFAULT_CLIENT_URLS,
-    ...(process.env.CLIENT_URLS ?? '').split(/[;,]/),
-  ]
-    .filter(Boolean)
-    .map(normalizeOrigin));
+  const CLIENT_URLS = new Set(
+    [...DEFAULT_CLIENT_URLS, ...(process.env.CLIENT_URLS ?? '').split(/[;,]/)]
+      .filter(Boolean)
+      .map(normalizeOrigin),
+  );
 
   const app = await NestFactory.create(AppModule);
 
   /* CORS */
+  app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    if (
+      typeof origin === 'string' &&
+      CLIENT_URLS.has(normalizeOrigin(origin))
+    ) {
+      res.header('Access-Control-Allow-Origin', origin);
+      res.header('Access-Control-Allow-Credentials', 'true');
+      res.header('Vary', 'Origin');
+    }
+
+    res.header(
+      'Access-Control-Allow-Methods',
+      'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+    );
+    res.header(
+      'Access-Control-Allow-Headers',
+      req.headers['access-control-request-headers'] ??
+        'Origin, X-Requested-With, Content-Type, Accept, Authorization',
+    );
+
+    if (req.method === 'OPTIONS') {
+      res.sendStatus(204);
+      return;
+    }
+
+    next();
+  });
+
   app.enableCors({
     origin: (origin, callback) => {
       if (!origin || CLIENT_URLS.has(normalizeOrigin(origin))) {
