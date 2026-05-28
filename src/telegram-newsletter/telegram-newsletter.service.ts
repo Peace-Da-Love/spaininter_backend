@@ -119,4 +119,24 @@ export class TelegramNewsletterService {
       }
     }
   }
+
+  async sendNewsletterToChat(
+    text: string,
+    chatId: string | number,
+    messageThreadId?: number,
+  ) {
+    try {
+      const options: any = {
+        parse_mode: 'MarkdownV2',
+      };
+
+      if (messageThreadId !== undefined) {
+        options.message_thread_id = messageThreadId;
+      }
+
+      await this.BOT.telegram.sendMessage(chatId, text, options);
+    } catch (err) {
+      console.error(err);
+    }
+  }
 }

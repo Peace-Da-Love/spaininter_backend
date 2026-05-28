@@ -46,9 +46,26 @@ type TranslationResult = {
   content: string;
 };
 
+type RegionalTelegramTarget = {
+  chatId: string;
+  messageThreadId?: number;
+};
+
 @Injectable()
 export class NewsService {
   private readonly logger = new Logger(NewsService.name);
+  private readonly allNewsTelegramTarget: RegionalTelegramTarget = {
+    chatId: '@ForumSpain',
+    messageThreadId: 1,
+  };
+  private readonly regionalTelegramTargets: Record<
+    string,
+    RegionalTelegramTarget
+  > = {
+    torrevieja: { chatId: '@TorreviejaSpain', messageThreadId: 1 },
+    valencia: { chatId: '@ForumValencia', messageThreadId: 1 },
+    barcelona: { chatId: '@ForumBarcelona', messageThreadId: 1 },
+  };
 
   constructor(
     @InjectModel(News) private newsModel: typeof News,
@@ -703,7 +720,11 @@ export class NewsService {
       });
 
       if (status === 'approved') {
-        await this.sendApprovedNewsToTelegram(news.news_id, translations);
+        await this.sendApprovedNewsToTelegram(
+          news.news_id,
+          translations,
+          hashtagIds,
+        );
       }
       await t.commit();
     } catch (err) {
@@ -1287,6 +1308,7 @@ export class NewsService {
   private async sendApprovedNewsToTelegram(
     newsId: number,
     translations?: { language_id: number; title: string; link: string }[],
+    hashtagIds?: number[],
   ) {
     const enLangId = await this.languageService.findLanguageByName('en');
     const enTranslation =
@@ -1309,6 +1331,70 @@ export class NewsService {
     const tgMessage = `[${enTitle}](${utmLink})`;
 
     await this.telegramNewsletterService.sendNewsletter(tgMessage);
+    await this.telegramNewsletterService.sendNewsletterToChat(
+      tgMessage,
+      this.allNewsTelegramTarget.chatId,
+      this.allNewsTelegramTarget.messageThreadId,
+    );
+    await this.sendRegionalNewsToTelegram(tgMessage, newsId, hashtagIds);
+  }
+
+  private async sendRegionalNewsToTelegram(
+    tgMessage: string,
+    newsId: number,
+    hashtagIds?: number[],
+  ) {
+    try {
+      const hashtagNames = await this.getNewsHashtagNames(newsId, hashtagIds);
+      const targets = new Map<string, RegionalTelegramTarget>();
+
+      for (const hashtagName of hashtagNames) {
+        const normalizedName = hashtagName.replace(/^#/, '').toLowerCase();
+        const target = this.regionalTelegramTargets[normalizedName];
+
+        if (target) {
+          targets.set(target.chatId, target);
+        }
+      }
+
+      for (const target of targets.values()) {
+        await this.telegramNewsletterService.sendNewsletterToChat(
+          tgMessage,
+          target.chatId,
+          target.messageThreadId,
+        );
+      }
+    } catch (err) {
+      this.logger.error(
+        'Failed to send regional news to Telegram',
+        err instanceof Error ? err.stack : String(err),
+      );
+    }
+  }
+
+  private async getNewsHashtagNames(newsId: number, hashtagIds?: number[]) {
+    if (hashtagIds?.length) {
+      return Promise.all(
+        hashtagIds.map((hashtagId) =>
+          this.hashtagService.findHashtagById(hashtagId),
+        ),
+      );
+    }
+
+    const news = await this.newsModel.findOne({
+      where: { news_id: newsId },
+      attributes: ['news_id'],
+      include: [
+        {
+          model: Hashtag,
+          as: 'hashtags',
+          attributes: ['hashtag_name'],
+          through: { attributes: [] },
+        },
+      ],
+    });
+
+    return news?.hashtags?.map((hashtag) => hashtag.hashtag_name) ?? [];
   }
 
   private escapeJsonString(str: string) {
