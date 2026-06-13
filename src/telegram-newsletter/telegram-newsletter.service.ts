@@ -1,4 +1,4 @@
-import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { AddChannelDto } from './dto/add-channel.dto';
 import { TgChannel } from './telegram-newsletter.model';
 import { InjectModel } from '@nestjs/sequelize';
@@ -12,6 +12,7 @@ import { City } from '../cities/cities.entity';
 
 @Injectable()
 export class TelegramNewsletterService {
+  private readonly logger = new Logger(TelegramNewsletterService.name);
   private readonly BOT_TOKEN: string;
   private readonly BOT: Telegraf;
 
@@ -125,18 +126,48 @@ export class TelegramNewsletterService {
     chatId: string | number,
     messageThreadId?: number,
   ) {
-    try {
-      const options: any = {
-        parse_mode: 'MarkdownV2',
-      };
+    const baseOptions = {
+      parse_mode: 'MarkdownV2' as const,
+    };
 
-      if (messageThreadId !== undefined) {
-        options.message_thread_id = messageThreadId;
+    try {
+      await this.BOT.telegram.sendMessage(chatId, text, {
+        ...baseOptions,
+        ...(messageThreadId !== undefined
+          ? { message_thread_id: messageThreadId }
+          : {}),
+      });
+
+      return;
+    } catch (err) {
+      if (messageThreadId === undefined) {
+        this.logger.error(
+          `Failed to send Telegram message to ${chatId}`,
+          this.formatTelegramError(err),
+        );
+        return;
       }
 
-      await this.BOT.telegram.sendMessage(chatId, text, options);
-    } catch (err) {
-      console.error(err);
+      this.logger.warn(
+        `Failed to send Telegram message to ${chatId} thread ${messageThreadId}, retrying without thread: ${this.formatTelegramError(err)}`,
+      );
     }
+
+    try {
+      await this.BOT.telegram.sendMessage(chatId, text, baseOptions);
+    } catch (err) {
+      this.logger.error(
+        `Failed to send Telegram message to ${chatId} without thread`,
+        this.formatTelegramError(err),
+      );
+    }
+  }
+
+  private formatTelegramError(err: unknown) {
+    if (err instanceof Error) {
+      return err.stack ?? err.message;
+    }
+
+    return String(err);
   }
 }

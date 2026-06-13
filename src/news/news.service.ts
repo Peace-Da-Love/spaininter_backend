@@ -55,16 +55,15 @@ type RegionalTelegramTarget = {
 export class NewsService {
   private readonly logger = new Logger(NewsService.name);
   private readonly allNewsTelegramTarget: RegionalTelegramTarget = {
-    chatId: '@ForumSpain',
-    messageThreadId: 1,
+    chatId: '-1002067491776',
   };
   private readonly regionalTelegramTargets: Record<
     string,
     RegionalTelegramTarget
   > = {
-    torrevieja: { chatId: '@TorreviejaSpain', messageThreadId: 1 },
-    valencia: { chatId: '@ForumValencia', messageThreadId: 1 },
-    barcelona: { chatId: '@ForumBarcelona', messageThreadId: 1 },
+    torrevieja: { chatId: '-1001303923147' },
+    valencia: { chatId: '-1002106340245' },
+    barcelona: { chatId: '-1002051856007' },
   };
 
   constructor(
