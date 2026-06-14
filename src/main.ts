@@ -6,17 +6,65 @@ import * as bodyParser from 'body-parser';
 import * as express from 'express';
 import { join } from 'path';
 
+const normalizeOrigin = (origin: string) => origin.trim().replace(/\/$/, '');
+
 async function bootstrap() {
   const logger = new Logger('bootstrap');
 
   const PORT = process.env.PORT || 3000;
-  const CLIENT_URLS = process.env.CLIENT_URLS || 'http://localhost:5173';
+  const DEFAULT_CLIENT_URLS = [
+    'http://localhost:3000',
+    'http://localhost:5173',
+    'https://spaininter.com',
+    'https://crm.spaininter.com',
+  ];
+  const CLIENT_URLS = new Set(
+    [...DEFAULT_CLIENT_URLS, ...(process.env.CLIENT_URLS ?? '').split(/[;,]/)]
+      .filter(Boolean)
+      .map(normalizeOrigin),
+  );
 
   const app = await NestFactory.create(AppModule);
 
   /* CORS */
+  app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    if (
+      typeof origin === 'string' &&
+      CLIENT_URLS.has(normalizeOrigin(origin))
+    ) {
+      res.header('Access-Control-Allow-Origin', origin);
+      res.header('Access-Control-Allow-Credentials', 'true');
+      res.header('Vary', 'Origin');
+    }
+
+    res.header(
+      'Access-Control-Allow-Methods',
+      'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+    );
+    res.header(
+      'Access-Control-Allow-Headers',
+      req.headers['access-control-request-headers'] ??
+        'Origin, X-Requested-With, Content-Type, Accept, Authorization',
+    );
+
+    if (req.method === 'OPTIONS') {
+      res.sendStatus(204);
+      return;
+    }
+
+    next();
+  });
+
   app.enableCors({
-    origin: CLIENT_URLS.split(';'),
+    origin: (origin, callback) => {
+      if (!origin || CLIENT_URLS.has(normalizeOrigin(origin))) {
+        callback(null, true);
+        return;
+      }
+
+      callback(null, false);
+    },
     credentials: true,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
   });

@@ -21,6 +21,7 @@
     "test:e2e": "jest --config ./test/jest-e2e.json"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1045.0",
     "@google-cloud/storage": "^7.7.0",
     "@nestjs/common": "^10.0.0",
     "@nestjs/config": "^3.2.0",
@@ -38,6 +39,7 @@
     "cookie-parser": "^1.4.6",
     "ioredis": "^5.9.2",
     "nestjs-telegraf": "^2.7.0",
+    "openai": "^6.35.0",
     "passport-jwt": "^4.0.1",
     "pg": "^8.11.3",
     "reflect-metadata": "^0.1.13",

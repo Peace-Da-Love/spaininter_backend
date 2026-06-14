@@ -8,12 +8,13 @@ import { TokenModule } from '../token/token.module';
 import { JwtStrategy } from './strategy/jwt.strategy';
 import { Role } from '../role/role.model';
 import { News } from '../news/news.model';
+import { User } from '../users/user.model';
 
 @Module({
   imports: [
     forwardRef(() => TokenModule),
     ConfigModule,
-    SequelizeModule.forFeature([Admin, Role, News]),
+    SequelizeModule.forFeature([Admin, Role, News, User]),
   ],
   providers: [AuthService, JwtStrategy],
   controllers: [AuthController],

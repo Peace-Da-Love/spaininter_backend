@@ -15,9 +15,11 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { NewsService } from './news.service';
 import { CreateNewsDto } from './dto/create-news.dto';
 import { Auth } from '../auth/decorators/auth.decorator';
+import { AdminAuth } from '../auth/decorators/admin.decorator';
 import { AnyAuth } from '../auth/decorators/any-auth.decorator';
 import { GetNewsForAdminDto } from './dto/get-news-for-admin.dto';
 import { DeleteNewsDto } from './dto/delete-news.dto';
@@ -28,6 +30,7 @@ import { GetLatestNewsDto } from './dto/get-latest-news.dto';
 import { GetHashtagNewsDto } from './dto/get-hashtag-news.dto';
 import { UpdateNewsStatusDto } from './dto/update-news-status.dto';
 import { ReviewNewsDto } from './dto/review-news.dto';
+import { TranslateMissingNewsDto } from './dto/translate-missing-news.dto';
 import { Headers } from '@nestjs/common';
 import { UserJwtGuard } from '../user-auth/guards/user-jwt.guard';
 
@@ -78,8 +81,8 @@ export class NewsController {
   @UseGuards(UserJwtGuard)
   @Get('my')
   @HttpCode(HttpStatus.OK)
-  public async getMyNews() {
-    return this.newsService.getMyNewsForUser();
+  public async getMyNews(@Query() dto: GetNewsForAdminDto) {
+    return this.newsService.getMyNewsForUser(dto);
   }
 
   @AnyAuth()
@@ -96,7 +99,7 @@ export class NewsController {
     return this.newsService.getNewsForAdmin(dto);
   }
 
-  @Auth()
+  @AdminAuth()
   @Delete('delete')
   @HttpCode(HttpStatus.OK)
   public async deleteNews(@Query() dto: DeleteNewsDto) {
@@ -121,10 +124,27 @@ export class NewsController {
   }
 
   @Auth()
+  @Post('admin/translate-missing')
+  @HttpCode(HttpStatus.OK)
+  public async translateMissingDraftNews(@Body() dto: TranslateMissingNewsDto) {
+    return this.newsService.translateMissingDraftNews(dto);
+  }
+
+  @Auth()
+  @Post('admin/:id/translate-missing')
+  @HttpCode(HttpStatus.OK)
+  public async translateMissingNews(
+    @Param('id') id: string,
+    @Body() dto: TranslateMissingNewsDto,
+  ) {
+    return this.newsService.translateMissingNews(+id, dto);
+  }
+
+  @Auth()
   @Post(':id/photo')
   @UseInterceptors(
     FileInterceptor('photo', {
-      // Используем GoogleStorageService для обработки файла
+      storage: memoryStorage(),
     }),
   )
   @HttpCode(HttpStatus.OK)

@@ -6,7 +6,7 @@ import { AuthModule } from './auth/auth.module';
 import { UserAuthModule } from './user-auth/user-auth.module';
 import { TokenModule } from './token/token.module';
 import { BotModule } from './bot/bot.module';
-import { GoogleStorageModule } from './google-storage/google-storage.module';
+import { StorageModule } from './storage/storage.module';
 import { MulterModule } from '@nestjs/platform-express';
 import { HashtagsModule } from './hashtags/hashtags.module';
 import { LanguagesModule } from './languages/languages.module';
@@ -36,7 +36,7 @@ import { CitiesModule } from './cities/cities.module';
     UserAuthModule,
     TokenModule,
     BotModule,
-    GoogleStorageModule,
+    StorageModule,
     HashtagsModule,
     CitiesModule,
     LanguagesModule,

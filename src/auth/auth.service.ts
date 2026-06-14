@@ -13,6 +13,7 @@ import { Role } from '../role/role.model';
 import { IRole } from '../token/types/IPayload';
 import { Sequelize } from 'sequelize-typescript';
 import { News } from '../news/news.model';
+import { User } from '../users/user.model';
 
 @Injectable()
 export class AuthService {
@@ -23,6 +24,7 @@ export class AuthService {
     @Inject(REQUEST) private readonly request: Request,
     @InjectModel(Role) private roleModel: typeof Role,
     @InjectModel(News) private newsModel: typeof News,
+    @InjectModel(User) private userModel: typeof User,
     private sequelize: Sequelize,
   ) {}
 
@@ -207,6 +209,38 @@ export class AuthService {
       data: {
         count: creatorsCount,
         creators,
+      },
+    };
+  }
+
+  public async getUsers(dto: GetAdminsDto) {
+    const page = dto.page || 1;
+    const limit = dto.limit || 10;
+    const offset = (page - 1) * limit;
+
+    const users = await this.userModel.findAll({
+      limit,
+      offset,
+      attributes: [
+        'id',
+        'tg_id',
+        'username',
+        'first_name',
+        'last_name',
+        'photo_url',
+        'createdAt',
+        'updatedAt',
+      ],
+      order: [['createdAt', 'DESC']],
+    });
+    const usersCount = await this.userModel.count();
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Success',
+      data: {
+        count: usersCount,
+        users,
       },
     };
   }

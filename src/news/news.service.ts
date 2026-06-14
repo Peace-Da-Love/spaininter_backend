@@ -1,4 +1,11 @@
-import { HttpException, HttpStatus, Inject, Injectable } from '@nestjs/common';
+import {
+  HttpException,
+  HttpStatus,
+  Inject,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { CreateNewsDto } from './dto/create-news.dto';
 import { News, NewsStatus } from './news.model';
 import { InjectModel } from '@nestjs/sequelize';
@@ -23,26 +30,295 @@ import { Language } from '../languages/languages.model';
 import { GetNewsByIdDto } from './dto/get-news-by-id.dto';
 import { GetLatestNewsDto } from './dto/get-latest-news.dto';
 import { GetHashtagNewsDto } from './dto/get-hashtag-news.dto';
-import { GoogleStorageService } from '../google-storage/google-storage.service';
+import { StorageService } from '../storage/storage.service';
 import { transliterate as tr } from 'transliteration';
 import { ReviewNewsDto } from './dto/review-news.dto';
 import { NewsHashtag } from './news-hashtag.model';
+import { User } from '../users/user.model';
+import { Admin } from '../auth/admin.model';
+import OpenAI from 'openai';
+import { TranslateMissingNewsDto } from './dto/translate-missing-news.dto';
+
+type TranslationResult = {
+  language_id: number;
+  title: string;
+  description: string;
+  content: string;
+};
+
+type RegionalTelegramTarget = {
+  chatId: string;
+  messageThreadId?: number;
+};
 
 @Injectable()
 export class NewsService {
+  private readonly logger = new Logger(NewsService.name);
+  private readonly allNewsTelegramTarget: RegionalTelegramTarget = {
+    chatId: '-1002067491776',
+  };
+  private readonly regionalTelegramTargets: Record<
+    string,
+    RegionalTelegramTarget
+  > = {
+    torrevieja: { chatId: '-1001303923147' },
+    valencia: { chatId: '-1002106340245' },
+    barcelona: { chatId: '-1002051856007' },
+  };
+
   constructor(
     @InjectModel(News) private newsModel: typeof News,
     @InjectModel(NewsTranslations)
     private newsTranslationsModel: typeof NewsTranslations,
     @InjectModel(NewsHashtag)
     private newsHashtagModel: typeof NewsHashtag,
+    @InjectModel(User) private userModel: typeof User,
+    @InjectModel(Admin) private adminModel: typeof Admin,
     @Inject(REQUEST) private readonly request: Request,
     private readonly languageService: LanguagesService,
     private readonly hashtagService: HashtagsService,
     private readonly telegramNewsletterService: TelegramNewsletterService,
-    private readonly googleStorageService: GoogleStorageService,
+    private readonly storageService: StorageService,
+    private readonly configService: ConfigService,
     private sequelize: Sequelize,
   ) {}
+
+  public async translateMissingNews(
+    newsId: number,
+    dto: TranslateMissingNewsDto,
+  ) {
+    if (!Number.isInteger(newsId) || newsId <= 0) {
+      throw new HttpException('Invalid news id', HttpStatus.BAD_REQUEST);
+    }
+
+    const news = await this.newsModel.findOne({
+      where: { news_id: newsId },
+      attributes: ['news_id'],
+    });
+
+    if (!news) {
+      throw new HttpException('News not found', HttpStatus.NOT_FOUND);
+    }
+
+    return this.generateMissingNewsTranslations(dto);
+  }
+
+  public async translateMissingDraftNews(dto: TranslateMissingNewsDto) {
+    return this.generateMissingNewsTranslations(dto);
+  }
+
+  private async generateMissingNewsTranslations(dto: TranslateMissingNewsDto) {
+    const apiKey = this.configService.get<string>('OPENAI_API_KEY');
+    if (!apiKey) {
+      throw new HttpException(
+        'OpenAI API key is not configured',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    const requestedLanguageIds = [
+      dto.source.language_id,
+      ...dto.targets.map((target) => target.language_id),
+    ];
+    const languagesExist =
+      await this.languageService.checkLanguageExists(requestedLanguageIds);
+
+    if (!languagesExist) {
+      throw new HttpException('Invalid language id', HttpStatus.BAD_REQUEST);
+    }
+
+    const model =
+      this.configService.get<string>('OPENAI_TRANSLATION_MODEL') ??
+      'gpt-5-mini';
+    const baseURL =
+      this.configService.get<string>('OPENAI_BASE_URL') ??
+      (model.startsWith('deepseek') ? 'https://api.deepseek.com' : undefined);
+    const openai = new OpenAI({ apiKey, baseURL });
+
+    try {
+      const translations = await Promise.all(
+        dto.targets.map(async (target) => {
+          const translation: TranslationResult = {
+            language_id: target.language_id,
+            title: '',
+            description: '',
+            content: '',
+          };
+
+          for (const field of target.fields) {
+            const sourceText = dto.source[field];
+            translation[field] = await this.translateNewsField(
+              openai,
+              model,
+              dto.source.language_code,
+              target.language_code,
+              field,
+              sourceText,
+            );
+          }
+
+          return translation;
+        }),
+      );
+
+      this.validateGeneratedTranslations(translations, dto);
+
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'Missing translations generated successfully',
+        data: { translations },
+      };
+    } catch (error) {
+      this.logger.error('Failed to translate missing news fields', error);
+      throw new HttpException(
+        'Failed to translate missing news fields',
+        HttpStatus.BAD_GATEWAY,
+      );
+    }
+  }
+
+  private async translateNewsField(
+    openai: OpenAI,
+    model: string,
+    sourceLanguageCode: string,
+    targetLanguageCode: string,
+    field: 'title' | 'description' | 'content',
+    sourceText: string,
+  ) {
+    const protectedInput =
+      field === 'content'
+        ? this.protectMarkdownEmbeds(sourceText)
+        : { text: sourceText, placeholders: new Map<string, string>() };
+
+    const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+      {
+        role: 'system',
+        content:
+          'You are a professional news translator. Translate accurately, preserve line breaks, preserve markdown syntax, do not add facts, and keep the same editorial tone. Return only the translated text, without JSON, markdown fences, comments, labels, or explanations.',
+      },
+      {
+        role: 'user',
+        content:
+          `Translate this ${field} from ${sourceLanguageCode} to ${targetLanguageCode}.\n` +
+          this.getFieldTranslationRules(field) +
+          '\n\nText:\n' +
+          protectedInput.text,
+      },
+    ];
+
+    const response = await openai.chat.completions.create({
+      model,
+      messages,
+    });
+
+    const content = response.choices[0]?.message?.content;
+    if (!content) {
+      throw new Error(`Translation model returned an empty ${field}`);
+    }
+
+    const translatedText = this.stripModelFormatting(content);
+    const restoredText = this.restoreMarkdownEmbeds(
+      translatedText,
+      protectedInput.placeholders,
+    );
+
+    return this.limitTranslatedField(field, restoredText);
+  }
+
+  private getFieldTranslationRules(field: 'title' | 'description' | 'content') {
+    if (field === 'title') {
+      return 'Rules: keep the result under 100 characters.';
+    }
+
+    if (field === 'description') {
+      return 'Rules: keep the result under 255 characters.';
+    }
+
+    return (
+      'Rules: preserve headings, lists, paragraphs, blank lines, markdown formatting, and placeholder tokens exactly. ' +
+      'Do not translate or modify tokens like __SPAININTER_MEDIA_0__. ' +
+      'Do not translate URLs, phone numbers, JSX tags, image markdown, video embeds, or HTML entities.'
+    );
+  }
+
+  private protectMarkdownEmbeds(markdown: string) {
+    const placeholders = new Map<string, string>();
+    let protectedText = markdown;
+    let index = 0;
+
+    const replace = (pattern: RegExp) => {
+      protectedText = protectedText.replace(pattern, (match: string) => {
+        const placeholder = `__SPAININTER_MEDIA_${index}__`;
+        index += 1;
+        placeholders.set(placeholder, match);
+        return placeholder;
+      });
+    };
+
+    replace(/<YouTube\b[^>]*\/?>/g);
+    replace(/<TikTok\b[^>]*\/?>/g);
+    replace(/!\[[^\]]*]\([^\n]*?\)/g);
+
+    return { text: protectedText, placeholders };
+  }
+
+  private restoreMarkdownEmbeds(
+    translatedText: string,
+    placeholders: Map<string, string>,
+  ) {
+    let restoredText = translatedText;
+
+    for (const [placeholder, original] of placeholders) {
+      const placeholderPattern = new RegExp(
+        placeholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+        'g',
+      );
+      restoredText = restoredText.replace(placeholderPattern, original);
+    }
+
+    return restoredText;
+  }
+
+  private stripModelFormatting(text: string) {
+    const trimmed = text.trim();
+    const fenced = trimmed.match(
+      /^```(?:markdown|md|text)?\s*([\s\S]*?)\s*```$/i,
+    );
+    return fenced?.[1]?.trim() ?? trimmed;
+  }
+
+  private limitTranslatedField(
+    field: 'title' | 'description' | 'content',
+    value: string,
+  ) {
+    if (field === 'title') return value.slice(0, 100);
+    if (field === 'description') return value.slice(0, 255);
+    return value.slice(0, 50000);
+  }
+
+  private validateGeneratedTranslations(
+    translations: TranslationResult[],
+    dto: TranslateMissingNewsDto,
+  ) {
+    if (translations.length !== dto.targets.length) {
+      throw new Error(
+        `Translation model returned ${translations.length} translations for ${dto.targets.length} targets`,
+      );
+    }
+
+    const invalidTarget = translations.find((translation) =>
+      dto.targets.some((target) => {
+        if (target.language_id !== translation.language_id) return false;
+        return target.fields.some((field) => !translation[field]?.trim());
+      }),
+    );
+
+    if (invalidTarget) {
+      throw new Error(
+        `Translation model returned empty requested fields for language_id=${invalidTarget.language_id}`,
+      );
+    }
+  }
 
   public async getNewsByIdForSite(dto: GetNewsByIdDto, languageCode?: string) {
     const id = Number(dto.id);
@@ -308,7 +584,7 @@ export class NewsService {
     };
   }
 
-  public async getMyNewsForUser() {
+  public async getMyNewsForUser(dto: GetNewsForAdminDto) {
     const actor = this.request['user'] as { user_id?: number } | undefined;
     const userId = actor?.user_id;
 
@@ -316,9 +592,30 @@ export class NewsService {
       throw new HttpException('Unauthorized', HttpStatus.UNAUTHORIZED);
     }
 
+    const page = dto.page || 1;
+    const limit = dto.limit || 10;
+    const offset = (page - 1) * limit;
+    const user = await this.userModel.findByPk(userId, {
+      attributes: ['tg_id'],
+    });
+
+    if (!user) {
+      throw new HttpException('User not found', HttpStatus.NOT_FOUND);
+    }
+
+    const admin = await this.adminModel.findOne({
+      where: { tg_id: user.tg_id },
+      attributes: ['id'],
+    });
+    const isAdmin = Boolean(admin);
+    const where = isAdmin ? undefined : { user_id: userId };
+
     const news = await this.newsModel.findAndCountAll({
-      where: { user_id: userId },
-      attributes: ['views', 'createdAt', 'status'],
+      limit,
+      offset,
+      where,
+      distinct: true,
+      attributes: [['news_id', 'newsId'], 'views', 'createdAt', 'status'],
       include: [
         {
           as: 'newsTranslations',
@@ -328,16 +625,18 @@ export class NewsService {
         },
       ],
       order: [['createdAt', 'DESC']],
-      subQuery: false,
     });
+    const pageCount = Math.ceil(news.count / limit);
+    const hasNextPage = page < pageCount;
+    const hasPreviousPage = page > 1;
 
     const rows = news.rows.map((row) => {
       const plain = row.get({ plain: true }) as unknown as Record<
         string,
         unknown
       >;
-      delete plain.news_id;
       delete plain.admin_id;
+      delete plain.user_id;
       return plain;
     });
 
@@ -348,7 +647,12 @@ export class NewsService {
         news: {
           count: news.count,
           rows,
+          currentPage: page,
+          pageCount,
+          hasNextPage,
+          hasPreviousPage,
         },
+        isAdmin,
       },
     };
   }
@@ -415,15 +719,11 @@ export class NewsService {
       });
 
       if (status === 'approved') {
-        const enLangId = await this.languageService.findLanguageByName('en');
-        const enTranslation = translations.find(
-          (t) => t.language_id === enLangId,
+        await this.sendApprovedNewsToTelegram(
+          news.news_id,
+          translations,
+          hashtagIds,
         );
-        const enTitle = escapeSpecialCharacters(enTranslation.title);
-        const enLink = enTranslation.link;
-        const utmLink = `https://spaininter.com/en/news/${enLink}?utm_source=telegram&utm_medium=article`;
-        const tgMessage = `[${enTitle}](${utmLink})`;
-        await this.telegramNewsletterService.sendNewsletter(tgMessage);
       }
       await t.commit();
     } catch (err) {
@@ -487,6 +787,7 @@ export class NewsService {
       throw new HttpException('News not found', HttpStatus.NOT_FOUND);
     }
 
+    const previousStatus = news.status;
     const updateData: Partial<News> = { status };
 
     if (status === 'approved') {
@@ -496,6 +797,10 @@ export class NewsService {
     }
 
     await this.newsModel.update(updateData, { where: { news_id: newsId } });
+
+    if (status === 'approved' && previousStatus !== 'approved') {
+      await this.sendApprovedNewsToTelegram(newsId);
+    }
 
     return {
       statusCode: HttpStatus.OK,
@@ -627,7 +932,7 @@ export class NewsService {
         newsId: dto.news_id,
         posterLink: news.poster_link,
       });
-      await this.googleStorageService.deleteFile(news.poster_link);
+      await this.storageService.deleteFile(news.poster_link);
     }
 
     await news.destroy();
@@ -641,7 +946,7 @@ export class NewsService {
   }
 
   public async uploadPosterFile(file: Express.Multer.File) {
-    return this.googleStorageService.uploadFile(file);
+    return this.storageService.uploadFile(file);
   }
 
   public async updateNews(dto: UpdateNewsDto) {
@@ -694,7 +999,7 @@ export class NewsService {
           });
 
           // Удаляем старый постер ДО обновления записи в БД
-          await this.googleStorageService.deleteFile(oldPosterLink);
+          await this.storageService.deleteFile(oldPosterLink);
         }
 
         newsUpdateData.poster_link = newPosterLink;
@@ -997,6 +1302,98 @@ export class NewsService {
       })),
       { transaction },
     );
+  }
+
+  private async sendApprovedNewsToTelegram(
+    newsId: number,
+    translations?: { language_id: number; title: string; link: string }[],
+    hashtagIds?: number[],
+  ) {
+    const enLangId = await this.languageService.findLanguageByName('en');
+    const enTranslation =
+      translations?.find((translation) => translation.language_id === enLangId) ??
+      (await this.newsTranslationsModel.findOne({
+        where: { news_id: newsId, language_id: enLangId },
+        attributes: ['title', 'link'],
+      }));
+
+    if (!enTranslation) {
+      throw new HttpException(
+        'English translation not found',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const enTitle = escapeSpecialCharacters(enTranslation.title);
+    const enLink = enTranslation.link;
+    const utmLink = `https://spaininter.com/en/news/${enLink}?utm_source=telegram&utm_medium=article`;
+    const tgMessage = `[${enTitle}](${utmLink})`;
+
+    await this.telegramNewsletterService.sendNewsletter(tgMessage);
+    await this.telegramNewsletterService.sendNewsletterToChat(
+      tgMessage,
+      this.allNewsTelegramTarget.chatId,
+      this.allNewsTelegramTarget.messageThreadId,
+    );
+    await this.sendRegionalNewsToTelegram(tgMessage, newsId, hashtagIds);
+  }
+
+  private async sendRegionalNewsToTelegram(
+    tgMessage: string,
+    newsId: number,
+    hashtagIds?: number[],
+  ) {
+    try {
+      const hashtagNames = await this.getNewsHashtagNames(newsId, hashtagIds);
+      const targets = new Map<string, RegionalTelegramTarget>();
+
+      for (const hashtagName of hashtagNames) {
+        const normalizedName = hashtagName.replace(/^#/, '').toLowerCase();
+        const target = this.regionalTelegramTargets[normalizedName];
+
+        if (target) {
+          targets.set(target.chatId, target);
+        }
+      }
+
+      for (const target of targets.values()) {
+        await this.telegramNewsletterService.sendNewsletterToChat(
+          tgMessage,
+          target.chatId,
+          target.messageThreadId,
+        );
+      }
+    } catch (err) {
+      this.logger.error(
+        'Failed to send regional news to Telegram',
+        err instanceof Error ? err.stack : String(err),
+      );
+    }
+  }
+
+  private async getNewsHashtagNames(newsId: number, hashtagIds?: number[]) {
+    if (hashtagIds?.length) {
+      return Promise.all(
+        hashtagIds.map((hashtagId) =>
+          this.hashtagService.findHashtagById(hashtagId),
+        ),
+      );
+    }
+
+    const news = await this.newsModel.findOne({
+      where: { news_id: newsId },
+      attributes: ['news_id'],
+      include: [
+        {
+          model: Hashtag,
+          as: 'hashtags',
+          attributes: ['hashtag_name'],
+          through: { attributes: [] },
+        },
+      ],
+    });
+
+    return news?.hashtags?.map((hashtag) => hashtag.hashtag_name) ?? [];
   }
 
   private escapeJsonString(str: string) {
