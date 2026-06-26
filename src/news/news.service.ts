@@ -1348,13 +1348,22 @@ export class NewsService {
       const targets = new Map<string, RegionalTelegramTarget>();
 
       for (const hashtagName of hashtagNames) {
-        const normalizedName = hashtagName.replace(/^#/, '').toLowerCase();
+        const normalizedName = hashtagName
+          .trim()
+          .replace(/^#/, '')
+          .toLowerCase();
         const target = this.regionalTelegramTargets[normalizedName];
 
         if (target) {
           targets.set(target.chatId, target);
         }
       }
+
+      this.logger.log(
+        `Regional Telegram targets for news ${newsId}: hashtags=${
+          hashtagNames.join(', ') || 'none'
+        }, targets=${targets.size}`,
+      );
 
       for (const target of targets.values()) {
         await this.telegramNewsletterService.sendNewsletterToChat(
@@ -1380,20 +1389,32 @@ export class NewsService {
       );
     }
 
+    const newsHashtags = await this.newsHashtagModel.findAll({
+      where: { news_id: newsId },
+      attributes: ['hashtag_id'],
+    });
+    const linkedHashtagIds = newsHashtags.map(
+      (newsHashtag) => newsHashtag.hashtag_id,
+    );
+
+    if (linkedHashtagIds.length) {
+      return Promise.all(
+        linkedHashtagIds.map((hashtagId) =>
+          this.hashtagService.findHashtagById(hashtagId),
+        ),
+      );
+    }
+
     const news = await this.newsModel.findOne({
       where: { news_id: newsId },
-      attributes: ['news_id'],
-      include: [
-        {
-          model: Hashtag,
-          as: 'hashtags',
-          attributes: ['hashtag_name'],
-          through: { attributes: [] },
-        },
-      ],
+      attributes: ['hashtag_id'],
     });
 
-    return news?.hashtags?.map((hashtag) => hashtag.hashtag_name) ?? [];
+    if (!news?.hashtag_id) {
+      return [];
+    }
+
+    return [await this.hashtagService.findHashtagById(news.hashtag_id)];
   }
 
   private escapeJsonString(str: string) {
